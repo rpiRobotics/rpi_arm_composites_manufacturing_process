@@ -11,6 +11,7 @@ def main():
     # Wait for payload messages to arrive
     time.sleep(0.5)
     
+    rospy.loginfo("Begin panel pick and place script")
     p.pickup_prepare('leeward_mid_panel')
     p.pickup_lower()
     p.pickup_grab()
@@ -20,6 +21,7 @@ def main():
     p.place_lower()
     p.place_set()
     p.place_raise()
+    rospy.loginfo("End panel pick and place script")
 
 if __name__ == '__main__':
     main()
