@@ -245,11 +245,10 @@ class ProcessController(object):
     
     def _update_rviz_sim_cameras(self):
         
+        marker_array=MarkerArray()
         for p in self.payloads:
             payload=self.payloads[p]
-            msg=payload.payload_msg
-            
-            marker_array=MarkerArray()
+            msg=payload.payload_msg           
             
             for i in xrange(len(msg.mesh_resources)):
                 marker=Marker()
@@ -276,8 +275,8 @@ class ProcessController(object):
             
                 marker_array.markers.append(marker)               
                     
-            marker_array._check_types
-            self.rviz_cam_publisher.publish(marker_array)    
+        marker_array._check_types
+        self.rviz_cam_publisher.publish(marker_array)    
     
     def _update_payload_pose(self, payload_name, pose, parent_frame_id = None, confidence = 0.1):
         with self.payloads_lock:

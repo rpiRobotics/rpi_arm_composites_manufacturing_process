@@ -160,8 +160,10 @@ def urdf_to_payload(xml_str):
         payload_msg.markers.append(aruco_marker)
     
     #Load in meshes
-    
-    for j_name, l_name in chain([(None, payload_link_name)], urdf_robot.child_map[payload_link_name]):  
+    payload_mesh_visual_chain=[(None, payload_link_name)]
+    if payload_link_name in urdf_robot.child_map:
+        payload_mesh_visual_chain.extend(urdf_robot.child_map[payload_link_name])
+    for j_name, l_name in payload_mesh_visual_chain:  
         v=urdf_robot.link_map[l_name].visual       
         j=urdf_robot.joint_map[j_name] if j_name is not None else None       
         
@@ -311,20 +313,23 @@ def urdf_to_payload_main(argv=None):
             
     payload_array=PayloadArray()    
     
-    for f in args.payload_xacro_in:
-        with f:
-            payload = xacro_string_to_payload(f.read(), f.name)            
-            payload_array.payloads.append(payload)
+    if args.payload_xacro_in is not None:
+        for f in args.payload_xacro_in:
+            with f:
+                payload = xacro_string_to_payload(f.read(), f.name)            
+                payload_array.payloads.append(payload)
     
-    for f in args.payload_target_xacro_in:
-        with f:
-            payload = xacro_string_to_payload_target(f.read(), f.name)            
-            payload_array.payload_targets.append(payload)
+    if args.payload_target_xacro_in is not None:
+        for f in args.payload_target_xacro_in:
+            with f:
+                payload = xacro_string_to_payload_target(f.read(), f.name)            
+                payload_array.payload_targets.append(payload)
     
-    for f in args.link_markers_xacro_in:
-        with f:
-            payload = xacro_string_to_link_markers(f.read(), f.name)            
-            payload_array.link_markers.append(payload)
+    if args.link_markers_xacro_in is not None:
+        for f in args.link_markers_xacro_in:
+            with f:
+                payload = xacro_string_to_link_markers(f.read(), f.name)            
+                payload_array.link_markers.append(payload)
     
     if args.pub is not None:        
         rospy.init_node("urdf_to_payload", anonymous=True)
