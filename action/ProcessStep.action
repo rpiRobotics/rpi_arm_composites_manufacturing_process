@@ -1,0 +1,15 @@
+# Service to execute a process step. Node that this
+# is not a stable definition and will change
+# in the future
+
+#goal definition
+string command
+string target
+---
+#result definition
+string state
+string payload
+string target
+---
+#feedback
+

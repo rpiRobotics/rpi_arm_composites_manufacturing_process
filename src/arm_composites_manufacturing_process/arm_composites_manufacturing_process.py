@@ -330,7 +330,7 @@ class ProcessController(object):
         self.controller_commander.plan_and_move(pose_target)
         
         self.current_target=target_payload
-        self.current_state="pickup_prepare"                
+        self.state="pickup_prepare"                
         
         rospy.loginfo("Finish pickup prepare for payload %s", target_payload)
    
@@ -348,14 +348,16 @@ class ProcessController(object):
                                                       self.get_payload_pickup_ft_threshold(self.current_target))
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
-            
+        
+        self.state="pickup_lower"
+        
         rospy.loginfo("Finish pickup_lower for payload %s", self.current_target)
 
     def pickup_grab(self):
         #TODO: check change state and target
         
         rospy.loginfo("Begin pickup_grab for payload %s", self.current_target)
-        
+               
         object_target, _=self._tf_get_object_gripper_target_pose(self.current_target)
         pose_target2=copy.deepcopy(object_target)
         pose_target2.p[2] -= 0.15   
@@ -388,6 +390,7 @@ class ProcessController(object):
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
         
+        self.state="pickup_grab"
             
         rospy.loginfo("Finish pickup_grab for payload %s", self.current_target)
     
@@ -405,7 +408,9 @@ class ProcessController(object):
         self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [])
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
-            
+        
+        self.state="pickup_raise"
+        
         rospy.loginfo("Finish pickup_raise for payload %s", self.current_target)
         
     def transport_payload(self, target):
@@ -424,7 +429,7 @@ class ProcessController(object):
         self.controller_commander.plan_and_move(pose_target)
         
         self.current_target=target
-        self.current_state="transport_panel"                
+        self.state="transport_panel"                
         
         rospy.loginfo("Finish transport_panel for payload %s to %s", self.current_payload, target)
     
@@ -443,9 +448,9 @@ class ProcessController(object):
         self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar, [])
         self.controller_commander.plan_and_move(pose_target)
                 
-        self.current_state="lower_panel"                
+        self.state="place_lower"                
         
-        rospy.loginfo("Finish lower_panel for payload %s to %s", self.current_payload, self.current_target)
+        rospy.loginfo("Finish place_lower for payload %s to %s", self.current_payload, self.current_target)
     
     def place_set(self):
         
@@ -488,8 +493,9 @@ class ProcessController(object):
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
         
+        self.state="place_set"
             
-        rospy.loginfo("Finish pickup_grab for payload %s", self.current_target)
+        rospy.loginfo("Finish place_set for payload %s", self.current_target)
         
     def place_raise(self):
         
@@ -508,5 +514,5 @@ class ProcessController(object):
             
         rospy.loginfo("Finish place_raise for payload %s", self.current_target)
        
-    
+        self.state="place_raise"
     
