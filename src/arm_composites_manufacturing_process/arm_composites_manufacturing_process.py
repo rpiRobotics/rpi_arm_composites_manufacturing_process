@@ -36,8 +36,8 @@ import general_robotics_toolbox.urdf as urdf
 import general_robotics_toolbox.ros_msg as rox_msg
 from general_robotics_toolbox import ros_tf as tf
 
-import abb_irc5_rapid_node_commander as rapid_node_pkg
-import arm_composites_manufacturing_controller_commander as controller_commander_pkg
+import rpi_abb_irc5.ros.rapid_commander as rapid_node_pkg
+import safe_kinematic_controller.ros.commander as controller_commander_pkg
 
 from object_recognition_msgs.msg import ObjectRecognitionAction, ObjectRecognitionGoal
 from rpi_arm_composites_manufacturing_process.msg import PayloadArray
@@ -67,8 +67,8 @@ class ProcessController(object):
     def __init__(self, disable_ft=False):
         self.urdf=URDF.from_parameter_server()
         self.vision_client=actionlib.SimpleActionClient("recognize_objects", ObjectRecognitionAction)        
-        self.rapid_node = rapid_node_pkg.AbbIrc5RAPIDNodeCommander()
-        self.controller_commander=controller_commander_pkg.arm_composites_manufacturing_controller_commander()
+        self.rapid_node = rapid_node_pkg.RAPIDCommander()
+        self.controller_commander=controller_commander_pkg.ControllerCommander()
         self.state='init'
         self.current_target=None
         self.current_payload=None
@@ -326,7 +326,7 @@ class ProcessController(object):
         
         rospy.logdebug("Prepare pickup %s at pose %s", target_payload, object_target)
         
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar, [])
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar, [], [])
         self.controller_commander.plan_and_move(pose_target)
         
         self.current_target=target_payload
@@ -344,7 +344,7 @@ class ProcessController(object):
         pose_target2=copy.deepcopy(object_target)
         pose_target2.p[2] += 0.15    
         
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, \
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], \
                                                       self.get_payload_pickup_ft_threshold(self.current_target))
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
@@ -362,7 +362,7 @@ class ProcessController(object):
         pose_target2=copy.deepcopy(object_target)
         pose_target2.p[2] -= 0.15   
         
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, \
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [], \
                                                       self.get_payload_pickup_ft_threshold(self.current_target))
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
@@ -386,7 +386,7 @@ class ProcessController(object):
         pose_target2=copy.deepcopy(object_target)
         pose_target2.p[2] += 0.15   
         
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [])
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [], [])
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
         
@@ -405,7 +405,7 @@ class ProcessController(object):
         pose_target2=copy.deepcopy(object_target)
         pose_target2.p[2] += 0.8   
         
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [])
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
         
@@ -425,7 +425,7 @@ class ProcessController(object):
                 
         pose_target.p[2] += 0.5       
         
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar, [])
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar, [], [])
         self.controller_commander.plan_and_move(pose_target)
         
         self.current_target=target
@@ -445,7 +445,7 @@ class ProcessController(object):
                 
         pose_target.p[2] += 0.15  
         
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar, [])
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar, [], [])
         self.controller_commander.plan_and_move(pose_target)
                 
         self.state="place_lower"                
@@ -464,7 +464,7 @@ class ProcessController(object):
         pose_target2=copy.deepcopy(pose_target)
         pose_target2.p[2] -= 0.15 
         
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, \
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [], \
                                                       self.get_payload_pickup_ft_threshold(self.current_target))
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
@@ -489,7 +489,7 @@ class ProcessController(object):
         pose_target2=copy.deepcopy(pose_target)
         pose_target2.p[2] += 0.15   
         
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [])
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [], [])
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
         
@@ -508,7 +508,7 @@ class ProcessController(object):
         pose_target2=copy.deepcopy(object_target)
         pose_target2.p[2] += 0.5
         
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [])
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
           
         self.controller_commander.compute_cartesian_path_and_move(pose_target2, avoid_collisions=False)
             
