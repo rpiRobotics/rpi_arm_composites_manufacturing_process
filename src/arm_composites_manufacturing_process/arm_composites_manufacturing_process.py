@@ -46,7 +46,7 @@ import time
 import sys
 
 import os
-from rpi_arm_composites_manufacturing_process.msg import Payload, PayloadTarget, PayloadArray, ArucoGridboard
+from rpi_arm_composites_manufacturing_process.msg import Payload, PayloadTarget, PayloadArray, ArucoGridboard, ProcessState
 import threading
 from moveit_commander import PlanningSceneInterface
 import traceback
@@ -85,6 +85,8 @@ class ProcessController(object):
         self.tf_listener=PayloadTransformListener()
         self._payload_msg_sub=rospy.Subscriber("payload", PayloadArray, self._payload_msg_cb)
         self._payload_msg_pub=rospy.Publisher("payload", PayloadArray, queue_size=100)
+        self._process_state_pub = rospy.Publisher("process_state", ProcessState, queue_size=100, latch=True)
+        self.publish_process_state()
     
     def _vision_get_object_pose(self, key):
         self.vision_client.wait_for_server()
@@ -334,6 +336,8 @@ class ProcessController(object):
         
         rospy.loginfo("Finish pickup prepare for payload %s", target_payload)
    
+        self.publish_process_state()
+   
     def pickup_lower(self):
         
         #TODO: check change state and target
@@ -352,6 +356,8 @@ class ProcessController(object):
         self.state="pickup_lower"
         
         rospy.loginfo("Finish pickup_lower for payload %s", self.current_target)
+        
+        self.publish_process_state()
 
     def pickup_grab(self):
         #TODO: check change state and target
@@ -393,6 +399,8 @@ class ProcessController(object):
         self.state="pickup_grab"
             
         rospy.loginfo("Finish pickup_grab for payload %s", self.current_target)
+        
+        self.publish_process_state()
     
     def pickup_raise(self):
         
@@ -413,6 +421,8 @@ class ProcessController(object):
         
         rospy.loginfo("Finish pickup_raise for payload %s", self.current_target)
         
+        self.publish_process_state()
+        
     def transport_payload(self, target):
         
         #TODO: check state and payload
@@ -432,6 +442,8 @@ class ProcessController(object):
         self.state="transport_panel"                
         
         rospy.loginfo("Finish transport_panel for payload %s to %s", self.current_payload, target)
+        
+        self.publish_process_state()
     
     def place_lower(self):
         
@@ -451,6 +463,8 @@ class ProcessController(object):
         self.state="place_lower"                
         
         rospy.loginfo("Finish place_lower for payload %s to %s", self.current_payload, self.current_target)
+        
+        self.publish_process_state()
     
     def place_set(self):
         
@@ -497,6 +511,8 @@ class ProcessController(object):
             
         rospy.loginfo("Finish place_set for payload %s", self.current_target)
         
+        self.publish_process_state()
+        
     def place_raise(self):
         
         #TODO: check change state and target
@@ -515,4 +531,17 @@ class ProcessController(object):
         rospy.loginfo("Finish place_raise for payload %s", self.current_target)
        
         self.state="place_raise"
+        
+        self.publish_process_state()
+        
+    def _fill_process_state(self):
+        s=ProcessState()
+        s.state=self.state if self.state is not None else ""
+        s.payload=self.current_payload if self.current_payload is not None else ""
+        s.target=self.current_target if self.current_target is not None else ""
+        return s
+    
+    def publish_process_state(self):
+        s=self._fill_process_state()
+        self._process_state_pub.publish(s)
     
