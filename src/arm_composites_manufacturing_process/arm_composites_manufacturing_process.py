@@ -40,28 +40,20 @@ import rpi_abb_irc5.ros.rapid_commander as rapid_node_pkg
 import safe_kinematic_controller.ros.commander as controller_commander_pkg
 
 from object_recognition_msgs.msg import ObjectRecognitionAction, ObjectRecognitionGoal
-from rpi_arm_composites_manufacturing_process.msg import PayloadArray
+from industrial_payload_manager.msg import PayloadArray
 
 import time
 import sys
 
 import os
-from rpi_arm_composites_manufacturing_process.msg import Payload, PayloadTarget, PayloadArray, ArucoGridboard, ProcessState
+from rpi_arm_composites_manufacturing_process.msg import ProcessState
 import threading
-from moveit_commander import PlanningSceneInterface
 import traceback
-import resource_retriever
-import urlparse
 from urdf_parser_py.urdf import URDF
 from tf.msg import tfMessage
-from visualization_msgs.msg import Marker, MarkerArray
-from .payload_transform_listener import PayloadTransformListener
-
-class ProcessControllerPayload(object):
-    def __init__(self, payload_msg, ros_id):
-        self.payload_msg=payload_msg
-        self.ros_id=ros_id
-        self.attached_link=None
+from industrial_payload_manager.payload_transform_listener import PayloadTransformListener
+from industrial_payload_manager.srv import UpdatePayloadPose, UpdatePayloadPoseRequest, \
+    GetPayloadArray, GetPayloadArrayRequest
 
 class ProcessController(object):
     def __init__(self, disable_ft=False):
@@ -76,17 +68,11 @@ class ProcessController(object):
         self.desired_controller_mode=self.controller_commander.MODE_AUTO_TRAJECTORY
         self.speed_scalar=1.0
         self.disable_ft=disable_ft
-        self.payloads=dict()
-        self.payload_targets=dict()
-        self.payloads_lock=threading.Lock()        
-        self._ros_id=1
-        self.planning_scene=PlanningSceneInterface()        
-        self.rviz_cam_publisher=rospy.Publisher("rviz_sim_cameras/payload_marker_array", MarkerArray, queue_size=100, latch=True)
-        self.tf_listener=PayloadTransformListener()
-        self._payload_msg_sub=rospy.Subscriber("payload", PayloadArray, self._payload_msg_cb)
-        self._payload_msg_pub=rospy.Publisher("payload", PayloadArray, queue_size=100)
-        self._process_state_pub = rospy.Publisher("process_state", ProcessState, queue_size=100, latch=True)
+        self.tf_listener=PayloadTransformListener()       
+        self.process_state_pub = rospy.Publisher("process_state", ProcessState, queue_size=100, latch=True)
         self.publish_process_state()
+        self.update_payload_pose_srv=rospy.ServiceProxy("update_payload_pose", UpdatePayloadPose)
+        self.get_payload_array_srv=rospy.ServiceProxy("get_payload_array", GetPayloadArray)
     
     def _vision_get_object_pose(self, key):
         self.vision_client.wait_for_server()
@@ -114,7 +100,7 @@ class ProcessController(object):
     
     def _tf_get_object_gripper_target_pose(self, key):
         
-        payload=self.payloads[key].payload_msg
+        payload=self._get_payload(key)
         if payload.confidence < 0.8:
             raise Exception("Payload confidence too low for tf lookup")
         
@@ -123,187 +109,10 @@ class ProcessController(object):
         tag_rel_pose = self.tf_listener.lookupTransform(key, key + "_gripper_target", rospy.Time(0))        
         return object_pose * tag_rel_pose, object_pose
     
-    def _payload_msg_cb(self, msg):
-        try:
-            with self.payloads_lock:            
-                for p in msg.payloads:
-                    if p.name in self.payload_targets:
-                        rospy.logerr("Payload name already in use %s", p.name)
-                        continue
-                    if p.name not in self.payloads:
-                        ros_id=self._ros_id
-                        self._ros_id += 1
-                        payload=ProcessControllerPayload(p, ros_id)
-                        self.payloads[p.name]=payload
-                        self._update_payload_mesh(payload)
-                    else:
-                        payload = self.payloads[p.name]
-                        #ignore stale data
-                        if payload.payload_msg.header.stamp > p.header.stamp:
-                            continue
-                        
-                        payload.payload_msg=p                    
-                        self._update_payload_mesh(payload) 
-                    
-                for t in msg.payload_targets:
-                    if t.name in self.payloads:
-                        rospy.logerr("Payload name already in use %s", t.name)
-                        continue
-                    if t.name not in self.payload_targets:                    
-                        self.payload_targets[t.name]=t                    
-                    else:
-                        payload_target = self.payload_targets[p.name]
-                        #ignore stale data
-                        if payload_target.stamp > t.stamp:
-                            continue
-                        self.payload_targets[t.name]=t
-                        
-                for d in msg.delete_payloads:
-                    if d in self.payloads:
-                        payload = self.payloads[d]
-                        del self.payloads[d]
-                        self._delete_payload_mesh(payload)                        
-                    if d in self.payload_targets:
-                        del self.payload_targets[d]
-    
-        except:
-            traceback.print_exc()
-        
-    def _update_payload_mesh(self, payload):
-        rospy.logdebug("Update payload mesh %s", payload.payload_msg.name)
-        
-        self._remove_payload_from_planning_scene(payload)
-        self._add_payload_to_planning_scene(payload)
-        self._update_rviz_sim_cameras()
-        
-            
-    
-    def _delete_payload_mesh(self, payload):
-        rospy.logdebug("Delete payload mesh %s", payload.payload_msg.name)
-        self._update_rviz_sim_cameras()
-        self._remove_payload_from_planning_scene(payload)
-    
-    def _remove_payload_from_planning_scene(self, payload):
-        msg=payload.payload_msg
-                        
-        if payload.attached_link is not None:
-            if len(msg.mesh_resources) > 0:
-                try:
-                    self.planning_scene.remove_attached_object(payload.attached_link, msg.name)
-                except:
-                    pass
-                
-                for i in xrange(1,len(msg.mesh_resources)):
-                    try:
-                        self.planning_scene.remove_attached_object(payload.attached_link, msg.name + "_%d" % i)
-                    except:
-                        pass
-        
-        payload.attached_link = None
-            
-    def _add_payload_to_planning_scene(self, payload):
-        
-        msg=payload.payload_msg
-        
-        payload.attached_link=msg.header.frame_id
-        
-        urdf_root=self.urdf.get_root()
-        urdf_chain=self.urdf.get_chain(urdf_root, payload.attached_link, joints=True, links=False)
-        urdf_chain.reverse()
-        touch_links=[]
-        touch_root = None        
-        for j_name in urdf_chain:
-            j=self.urdf.joint_map[j_name]
-            if j.type != "fixed":
-                break
-            touch_root=j.parent
-        
-        def _touch_recurse(touch):
-            ret=[touch]
-            if touch in self.urdf.child_map:                
-                for c_j,c in self.urdf.child_map[touch]:
-                    if self.urdf.joint_map[c_j].type == "fixed":
-                        ret.extend(_touch_recurse(c))
-            return ret
-        
-        if touch_root is not None:
-            touch_links.extend(_touch_recurse(touch_root))        
-                
-        for i in xrange(len(msg.mesh_resources)):
-            
-            mesh_name=msg.name
-            if i > 0: mesh_name += "_%d" % i
-            
-            mesh_filename=urlparse.urlparse(resource_retriever.get_filename(msg.mesh_resources[i])).path
-            if mesh_filename.endswith(".dae"):
-                
-                #TODO: fix the dae import in planning_scene_interface
-                rospy.logwarn("dae files currently don't work with python planning_scene_interface, ignoring %s", mesh_filename)
-                continue
-            
-            mesh_pose = rox_msg.transform2pose_stamped_msg(rox_msg.msg2transform(msg.pose) * rox_msg.msg2transform(msg.mesh_poses[i]))            
-            mesh_pose.header.frame_id = payload.attached_link
-            self.planning_scene.attach_mesh(payload.attached_link, mesh_name, mesh_pose, mesh_filename, touch_links=touch_links)
-    
-    def _update_rviz_sim_cameras(self):
-        
-        marker_array=MarkerArray()
-        for p in self.payloads:
-            payload=self.payloads[p]
-            msg=payload.payload_msg           
-            
-            for i in xrange(len(msg.mesh_resources)):
-                marker=Marker()
-                marker.ns="payload_" + msg.name
-                marker.id=i
-                marker.type=marker.MESH_RESOURCE
-                marker.action=marker.ADD     
-                marker.mesh_resource=msg.mesh_resources[i]
-                marker.mesh_use_embedded_materials=True
-                
-                marker.pose = rox_msg.transform2pose_msg(rox_msg.msg2transform(msg.pose) * rox_msg.msg2transform(msg.mesh_poses[i]))                     
-                marker.header.frame_id = payload.attached_link
-                marker.scale.x=1.0
-                marker.scale.y=1.0
-                marker.scale.z=1.0
-                marker.color.a=1
-                marker.color.r=0.5
-                marker.color.g=0.5
-                marker.color.b=0.5            
-                marker.header.stamp=rospy.Time.now()
-                marker.frame_locked=True
-                marker._check_types()
-                #marker.colors.append(ColorRGBA(0.5,0.5,0.5,1))
-            
-                marker_array.markers.append(marker)               
-                    
-        marker_array._check_types
-        self.rviz_cam_publisher.publish(marker_array)    
-    
-    def _update_payload_pose(self, payload_name, pose, parent_frame_id = None, confidence = 0.1):
-        with self.payloads_lock:
-            n=rospy.Time.now()
-            payload=copy.deepcopy(self.payloads[payload_name].payload_msg)
-            if parent_frame_id is None:
-                parent_frame_id = payload.header.frame_id
-                
-            parent_tf = self.tf_listener.lookupTransform(parent_frame_id, pose.parent_frame_id, rospy.Time(0))
-            pose2=parent_tf.inv() * pose
-            payload.pose=rox_msg.transform2pose_msg(pose2)
-            payload.header.frame_id=parent_frame_id            
-            payload.header.stamp=n
-            payload.confidence = confidence
-            
-            payload_a=PayloadArray()
-            payload_a.payloads.append(payload)
-            payload_a.header.stamp=n
-            self._payload_msg_pub.publish(payload_a)
-        
-    
     def get_payload_pickup_ft_threshold(self, payload):
         if self.disable_ft:
             return []
-        return self.payloads[payload].payload_msg.gripper_targets[0].pickup_ft_threshold
+        return self._get_payload(payload).gripper_targets[0].pickup_ft_threshold
     
     def get_state(self):
         return self.state
@@ -543,5 +352,32 @@ class ProcessController(object):
     
     def publish_process_state(self):
         s=self._fill_process_state()
-        self._process_state_pub.publish(s)
+        self.process_state_pub.publish(s)
+        
+    def _update_payload_pose(self, payload_name, pose, parent_frame_id = None, confidence = 0.1):
+        
+        payload = self._get_payload(payload_name)
+        
+        if parent_frame_id is None:
+                parent_frame_id = payload.header.frame_id
+                
+        parent_tf = self.tf_listener.lookupTransform(parent_frame_id, pose.parent_frame_id, rospy.Time(0))
+        pose2=parent_tf.inv() * pose
+        
+        req=UpdatePayloadPoseRequest()
+        req.name=payload_name
+        req.pose=rox_msg.transform2pose_msg(pose2)
+        req.header.frame_id=parent_frame_id            
+        req.confidence = confidence
+        
+        res=self.update_payload_pose_srv(req)
+        if not res.success:
+            raise Exception("Could not update payload pose")
+        
+    def _get_payload(self, payload_name):
+        payload_array_res = self.get_payload_array_srv(GetPayloadArrayRequest([payload_name]))
+        if len(payload_array_res.payload_array.payloads) != 1 or payload_array_res.payload_array.payloads[0].name != payload_name:
+            raise Exception("Invalid payload specified")
+        
+        return payload_array_res.payload_array.payloads[0]
     
