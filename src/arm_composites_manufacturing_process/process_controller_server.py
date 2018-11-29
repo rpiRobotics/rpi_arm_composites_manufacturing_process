@@ -41,25 +41,58 @@ class ProcessControllerServer(object):
     def execute_cb(self, goal):
         
         command = goal.command
-        if command == "pickup_prepare":
-            self.controller.pickup_prepare(goal.target)
-        elif command == "pickup_lower":
-            self.controller.pickup_lower()
-        elif command == "pickup_grab":
-            self.controller.pickup_grab()
-        elif command == "pickup_raise":
-            self.controller.pickup_raise()
-        elif command == "transport_payload":
-            self.controller.transport_payload(goal.target)
-        elif command == "place_lower":
-            self.controller.place_lower()
-        elif command == "place_set":
-            self.controller.place_set()
-        elif command == "place_raise":
-            self.controller.place_raise()
+
+        if command == "plan_pickup_prepare":
+            self.controller.plan_pickup_prepare(goal.target)
+        elif command == "stop":
+            self.controller.stop()
+        elif command == "move_pickup_prepare":
+            self.controller.move_pickup_prepare()
+        elif command == "plan_to_reset_position":
+            self.controller.plan_to_reset_position()
+        elif command == "plan_pickup_lower":
+            self.controller.plan_pickup_lower()
+        elif command == "move_pickup_lower":
+            self.controller.move_pickup_lower()
+        elif command == "plan_pickup_grab_first_step":
+            self.controller.plan_pickup_grab_first_step()
+        elif command == "move_pickup_grab_first_step":
+            self.controller.move_pickup_grab_first_step()
+        elif command == "plan_pickup_grab_second_step":
+            self.controller.plan_pickup_grab_second_step()
+        elif command == "move_pickup_grab_second_step":
+            self.controller.move_pickup_grab_second_step()
+        elif command == "plan_pickup_raise":
+            self.controller.plan_pickup_raise()
+        elif command == "move_pickup_raise":
+            self.controller.move_pickup_raise()
+        elif command == "plan_transport_payload":
+            self.controller.plan_transport_payload(goal.target)
+        elif command == "move_transport_payload":
+            self.controller.move_transport_payload()
+        elif command == "plan_place_lower":
+            self.controller.plan_place_lower()
+        elif command == "move_place_lower":
+            self.controller.move_place_lower()
+        elif command == "plan_place_set_first_step":
+            self.controller.plan_place_set_first_step()
+        elif command == "move_place_set_first_step":
+            self.controller.move_place_set_first_step()
+        elif command == "plan_place_set_second_step":
+            self.controller.plan_place_set_second_step()
+        elif command == "move_place_set_second_step":
+            self.controller.move_place_set_second_step()
+        elif command == "plan_place_raise":
+            self.controller.plan_place_raise()
+        elif command == "move_place_raise":
+            self.controller.move_place_raise()
+        elif command == "move":
+            self.controller.move(goal.target)
+        elif command == "move_with_force_stop":
+            self.controller.move_with_force_stop(goal.target)
         else:
-            assert False, "Invalid command"        
-                
+            assert False, "Invalid command"
+
         res = ProcessStepResult()
         res.state=self.controller.state
         res.target=self.controller.current_target if self.controller.current_target is not None else ""

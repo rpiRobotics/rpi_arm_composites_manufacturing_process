@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   object_recognition_msgs
   rospy  
   std_msgs
+  moveit_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -69,7 +70,7 @@ catkin_python_setup()
 ## Generate added messages and services with any dependencies listed here
  generate_messages(
    DEPENDENCIES
-   std_msgs geometry_msgs actionlib_msgs
+   std_msgs geometry_msgs actionlib_msgs moveit_msgs
  )
 
 ################################################
