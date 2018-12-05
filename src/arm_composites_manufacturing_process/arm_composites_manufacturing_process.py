@@ -228,8 +228,8 @@ class ProcessController(object):
         
         rospy.loginfo("Begin pickup_grab for payload %s", self.current_target)
                
-        object_target, _=self._tf_get_object_gripper_target_pose(self.current_target)
-        pose_target2=copy.deepcopy(object_target)
+        self.object_target, _=self._tf_get_object_gripper_target_pose(self.current_target)
+        pose_target2=copy.deepcopy(self.object_target)
         pose_target2.p[2] -= 0.15   
 
         path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
@@ -250,7 +250,7 @@ class ProcessController(object):
             #self.controller_commander.execute(self.plan_dictionary['pickup_grab_first_step'])
         except Exception as err:
             print err
-        self.publish_process_state()
+
 
     def plan_pickup_grab_second_step(self):
         self.rapid_node.set_digital_io("Vacuum_enable", 1)
@@ -261,14 +261,14 @@ class ProcessController(object):
         world_to_panel_tf=self.tf_listener.lookupTransform("world", self.current_target, rospy.Time(0))
         world_to_gripper_tf=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
         panel_to_gripper_tf=world_to_gripper_tf.inv()*world_to_panel_tf
-        
+
         self.current_payload=self.current_target
         self.current_target=None
         
         self._update_payload_pose(self.current_payload, panel_to_gripper_tf, "vacuum_gripper_tool", 0.5)
         self.controller_commander.set_controller_mode(self.controller_commander.MODE_HALT,1,[],[])
         time.sleep(1)
-        
+
         pose_target2=copy.deepcopy(self.object_target)
         pose_target2.p[2] += 0.15   
         
