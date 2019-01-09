@@ -172,8 +172,8 @@ class ProcessController(object):
         pose_target=self.pose_target
         pose_target.p[2] += 0.5
         
-        rospy.loginfo("Prepare16 pickup %s at pose %s", target_payload, object_target)
-        
+        rospy.loginfo("Prepare pickup %s at pose %s", target_payload, object_target)
+        print pose_target.p
 
         path=self.controller_commander.plan(pose_target)
 
@@ -204,7 +204,7 @@ class ProcessController(object):
         object_target, _=self._tf_get_object_gripper_target_pose(self.current_target)
         pose_target2=copy.deepcopy(object_target)
         pose_target2.p[2] += 0.15    
-
+        print pose_target2.p
 
         path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
 
@@ -421,7 +421,7 @@ class ProcessController(object):
 
         self.current_payload=None
         self.current_target=None
-
+        '''
         time.sleep(1)
 
         pose_target2=copy.deepcopy(pose_target)
@@ -430,9 +430,11 @@ class ProcessController(object):
 
         path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
 
-        self.state="plan_place_set_second_step"
+
         self.plan_dictionary['place_set_second_step']=path
         rospy.loginfo("Finish place_set for payload %s", self.current_target)
+        '''
+        self.state="plan_place_set_second_step"
         self.publish_process_state()
 
     def move_place_set_second_step(self):
