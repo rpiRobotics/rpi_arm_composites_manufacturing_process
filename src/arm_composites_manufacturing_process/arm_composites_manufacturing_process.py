@@ -302,8 +302,8 @@ class ProcessController(object):
         object_target=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
         pose_target2=copy.deepcopy(object_target)
         pose_target2.p[2] += 0.8
-        #pose_target2.p = np.array([-0.02285,-1.840,1.0])
-        #pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
+        pose_target2.p = np.array([-0.02285,-1.840,1.0])
+        pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
 
 
           
