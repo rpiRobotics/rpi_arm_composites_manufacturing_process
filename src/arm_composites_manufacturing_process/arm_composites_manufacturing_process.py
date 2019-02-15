@@ -57,6 +57,7 @@ import urlparse
 from urdf_parser_py.urdf import URDF
 from tf.msg import tfMessage
 from visualization_msgs.msg import Marker, MarkerArray
+import subprocess
 
 
 class ProcessControllerPayload(object):
@@ -79,14 +80,17 @@ class ProcessController(object):
         self.desired_controller_mode=self.controller_commander.MODE_AUTO_TRAJECTORY
         self.speed_scalar=1.0
         self.disable_ft=disable_ft
-       
+        self.reset_code=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'Reset_Start_pos_wason2.py')
+        self.YC_place_code=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'Vision_MoveIt_new_Cam_WL_Jcam2_DJ_01172019_Panel1.py')
+        self.YC_place_code2=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'Vision_MoveIt_new_Cam_WL_Jcam2_DJ_01172019_Panel2.py')
+        self.YC_transport_code=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'test_moveit_commander_custom_trajectory_YC_TransportPath_Panels.py')
         self.tf_listener=PayloadTransformListener()
         self._process_state_pub = rospy.Publisher("process_state", ProcessState, queue_size=100, latch=True)
         self.publish_process_state()
 
         self.update_payload_pose_srv=rospy.ServiceProxy("update_payload_pose", UpdatePayloadPose)
         self.get_payload_array_srv=rospy.ServiceProxy("get_payload_array", GetPayloadArray)
-        
+        self.subprocess_handle=None
         self.plan_dictionary={}
     
     def _vision_get_object_pose(self, key):
@@ -148,13 +152,42 @@ class ProcessController(object):
     
     def get_current_pose(self):
         return self.controller_commander.get_current_pose()
+        
+    def stop_motion(self):
+        if(self.state in ["reset_position","transport_payload","place_panel"]):
+            self.subprocess_handle.terminate()
 
-    def plan_to_reset_position(self):
+    def reset_position(self):
         #TODO: Implement reset movement in process controller
         rospy.loginfo("Planning to reset position")
         self.state="reset_position"
-        self.plan_dictionary['reset']=path
+        subprocess_handle=subprocess.Popen(['python', self.reset_code])
+        subprocess_handle.wait()
+        ret_code=subprocess_handle.returncode
         self.publish_process_state()
+        
+    def transport_payload(self, target_payload):
+        self.state="transport_payload"
+        self.current_target=target_payload
+        if(target_payload=="leeward_mid_panel"):
+            subprocess_handle=subprocess.Popen(['python', self.YC_transport_code, 'leeward_mid_panel'])
+        elif(target_payload=="leeward_tip_panel"):
+            subprocess_handle=subprocess.Popen(['python', self.YC_transport_code, 'leeward_tip_panel'])
+        subprocess_handle.wait()
+        ret_code=subprocess_handle.returncode
+    	self.publish_process_state()
+    	
+    def place_panel(self, target_payload):
+        self.state="place_panel"
+        self.current_target=target_payload
+        if(target_payload=="leeward_mid_panel"):
+            subprocess_handle=subprocess.Popen(['python', self.YC_place_code])
+        elif(target_payload=="leeward_tip_panel"):
+            subprocess_handle=subprocess.Popen(['python', self.YC_place_code2])
+        subprocess_handle.wait()
+        ret_code=subprocess_handle.returncode
+        self.publish_process_state()
+    	
 
     def plan_pickup_prepare(self, target_payload):
         

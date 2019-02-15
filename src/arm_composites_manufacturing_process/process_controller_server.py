@@ -44,8 +44,8 @@ class ProcessControllerServer(object):
 
         if command == "plan_pickup_prepare":
             self.controller.plan_pickup_prepare(goal.target)
-        elif command == "stop":
-            self.controller.stop()
+        elif command == "stop_motion":
+            self.controller.stop_motion()
         elif command == "move_pickup_prepare":
             self.controller.move_pickup_prepare()
         elif command == "plan_to_reset_position":
@@ -86,10 +86,12 @@ class ProcessControllerServer(object):
             self.controller.plan_place_raise()
         elif command == "move_place_raise":
             self.controller.move_place_raise()
-        elif command == "move":
-            self.controller.move(goal.target)
-        elif command == "move_with_force_stop":
-            self.controller.move_with_force_stop(goal.target)
+        elif command == "reset_position":
+            self.controller.reset_position()
+        elif command == "transport_payload":
+            self.controller.transport_payload(goal.target)
+        elif command == "place_panel":
+            self.controller.place_panel(goal.target)
         else:
             assert False, "Invalid command"
 
