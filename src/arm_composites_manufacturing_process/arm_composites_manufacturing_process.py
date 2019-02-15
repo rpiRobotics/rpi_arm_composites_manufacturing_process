@@ -40,7 +40,7 @@ import rpi_abb_irc5.ros.rapid_commander as rapid_node_pkg
 import safe_kinematic_controller.ros.commander as controller_commander_pkg
 from rpi_arm_composites_manufacturing_process.msg import ProcessState
 from object_recognition_msgs.msg import ObjectRecognitionAction, ObjectRecognitionGoal
-from rpi_arm_composites_manufacturing_process.msg import PayloadArray
+
 from industrial_payload_manager.payload_transform_listener import PayloadTransformListener
 from industrial_payload_manager.srv import UpdatePayloadPose, UpdatePayloadPoseRequest, \
     GetPayloadArray, GetPayloadArrayRequest
@@ -48,7 +48,7 @@ import time
 import sys
 from moveit_msgs.msg import ExecuteTrajectoryAction, ExecuteTrajectoryGoal, MoveItErrorCodes
 import os
-from rpi_arm_composites_manufacturing_process.msg import Payload, PayloadTarget, PayloadArray, ArucoGridboard, ProcessState
+from rpi_arm_composites_manufacturing_process.msg import  ProcessState
 import threading
 from moveit_commander import PlanningSceneInterface
 import traceback
@@ -164,7 +164,7 @@ class ProcessController(object):
         
         object_target, object_pose=self._vision_get_object_gripper_target_pose(target_payload)
         
-        self._update_payload_pose(target_payload, object_pose, confidence=0.8)
+        self._update_payload_pose(target_payload, object_pose,parent_frame_id="pickup_nest", confidence=0.8)
         
         rospy.loginfo("Found payload %s at pose %s", target_payload, object_target)
         
@@ -187,10 +187,12 @@ class ProcessController(object):
     def move_pickup_prepare(self):
         self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
         result=None
+        
         self.state="pickup_prepare"
         goal=ExecuteTrajectoryGoal()
         goal.trajectory=self.plan_dictionary['pickup_prepare']
         self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+        self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.async_execute(self.plan_dictionary['pickup_prepare'],result)
 
 
@@ -216,10 +218,14 @@ class ProcessController(object):
     def move_pickup_lower(self):
         self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], self.get_payload_pickup_ft_threshold(self.current_target))
         result=None
+        rospy.loginfo("moving_pickup_lower")
+        if(self.state!="plan_pickup_lower"):
+            self.plan_pickup_lower()
         self.state="pickup_lower"
         goal=ExecuteTrajectoryGoal()
         goal.trajectory=self.plan_dictionary['pickup_lower']
         self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+        self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.execute(self.plan_dictionary['pickup_lower'])
 
 
@@ -241,12 +247,14 @@ class ProcessController(object):
         self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [],\
                                                       self.get_payload_pickup_ft_threshold(self.current_target))
         result=None
-
+        if(self.state!="plan_pickup_grab_first_step"):
+            self.plan_pickup_grab_first_step()
         self.state="pickup_grab_first_step"
         try:
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_grab_first_step']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+            self.execute_trajectory_action.wait_for_result()
             #self.controller_commander.execute(self.plan_dictionary['pickup_grab_first_step'])
         except Exception as err:
             print err
@@ -285,10 +293,13 @@ class ProcessController(object):
 
         self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar,[], [])
         result=None
+        if(self.state!="plan_pickup_grab_second_step"):
+            self.plan_pickup_grab_second_step()
         self.state="pickup_grab_second_step"
         goal=ExecuteTrajectoryGoal()
         goal.trajectory=self.plan_dictionary['pickup_grab_second_step']
         self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+        self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.execute(self.plan_dictionary['pickup_grab_second_step'])
 
 
@@ -317,12 +328,14 @@ class ProcessController(object):
     def move_pickup_raise(self):
         self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
         result=None
+        if(self.state!="plan_pickup_raise"):
+            self.plan_pickup_raise()
         self.state="pickup_raise"
         goal=ExecuteTrajectoryGoal()
         goal.trajectory=self.plan_dictionary['pickup_raise']
         self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
         #self.controller_commander.async_execute(self.plan_dictionary['pickup_raise'],result)
-
+        self.execute_trajectory_action.wait_for_result()
 
     def plan_transport_payload(self, target):
         
@@ -330,9 +343,10 @@ class ProcessController(object):
         
         rospy.loginfo("Begin transport_panel for payload %s to %s", self.current_payload, target)
         
-        panel_target_pose = self.tf_listener.lookupTransform("world", target, rospy.Time(0))        
-        panel_gripper_pose = self.tf_listener.lookupTransform(self.current_payload, "vacuum_gripper_tool", rospy.Time(0))        
-        pose_target=panel_target_pose * panel_gripper_pose
+        #panel_target_pose = self.tf_listener.lookupTransform("world", target, rospy.Time(0))        
+        #panel_gripper_pose = self.tf_listener.lookupTransform(self.current_payload, "vacuum_gripper_tool", rospy.Time(0))        
+        #pose_target=panel_target_pose * panel_gripper_pose
+        pose_target=copy.deepcopy(self.pose_target)
         pose_target.p = [2.197026484647054, 1.2179574262842452, 0.12376598588449844]
         pose_target.R = np.array([[-0.99804142,  0.00642963,  0.06222524], [ 0.00583933,  0.99993626, -0.00966372], [-0.06228341, -0.00928144, -0.99801535]])
         pose_target.p[2] += 0.35
