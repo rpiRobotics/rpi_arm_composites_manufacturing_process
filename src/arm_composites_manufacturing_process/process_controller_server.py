@@ -35,20 +35,21 @@ import rospy
 class ProcessControllerServer(object):
     def __init__(self, disable_ft=False):
         self.controller=ProcessController(disable_ft)
-        self.server=actionlib.ActionServer("process_step", ProcessStepAction, execute_cb=self.execute_cb,cancel_cb=self.cancel, auto_start=False)
+        self.server=actionlib.ActionServer("process_step", ProcessStepAction, goal_cb=self.execute_cb,cancel_cb=self.cancel, auto_start=False)
         #TODO make goal cancelling of goal handle start here
         self.server.start()
         self.previous_goal=None
         
-    def cancel(self):
-        self.previous_goal.set_cancelled()
+    def cancel(self,goal):
+        self.previous_goal.set_canceled()
         
     def execute_cb(self, goal):
-        
-        command = goal.command
+        goal.set_accepted()
+        command = goal.get_goal().command
+        target = goal.get_goal().target
         self.previous_goal=goal
         if command == "plan_pickup_prepare":
-            self.controller.plan_pickup_prepare(goal.target)
+            self.controller.plan_pickup_prepare(target)
         elif command == "stop_motion":
             self.controller.stop_motion()
         elif command == "move_pickup_prepare":
@@ -72,7 +73,7 @@ class ProcessControllerServer(object):
         elif command == "move_pickup_raise":
             self.controller.move_pickup_raise()
         elif command == "plan_transport_payload":
-            self.controller.plan_transport_payload(goal.target)
+            self.controller.plan_transport_payload(target)
         elif command == "move_transport_payload":
             self.controller.move_transport_payload()
         elif command == "plan_place_lower":
@@ -94,11 +95,13 @@ class ProcessControllerServer(object):
         elif command == "reset_position":
             self.controller.reset_position()
         elif command == "transport_payload":
-            self.controller.transport_payload(goal.target)
+            self.controller.transport_payload(target)
         elif command == "place_panel":
-            self.controller.place_panel(goal.target)
+            self.controller.place_panel(target)
         else:
+            goal.set_rejected()
             assert False, "Invalid command"
+            
 
         
         res = ProcessStepResult()
@@ -106,7 +109,7 @@ class ProcessControllerServer(object):
         res.target=self.controller.current_target if self.controller.current_target is not None else ""
         res.payload=self.controller.current_payload if self.controller.current_payload is not None else ""
         
-        self.server.set_succeeded(res)
+        goal.set_succeeded(res)
         
             
 def process_controller_server_main():

@@ -154,6 +154,7 @@ class ProcessController(object):
         return self.controller_commander.get_current_pose()
         
     def stop_motion(self):
+        self.execute_trajectory_action.cancel_all_goals()
         if(self.state in ["reset_position","transport_payload","place_panel"]):
             self.subprocess_handle.terminate()
 
