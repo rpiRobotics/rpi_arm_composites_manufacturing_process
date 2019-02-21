@@ -35,13 +35,18 @@ import rospy
 class ProcessControllerServer(object):
     def __init__(self, disable_ft=False):
         self.controller=ProcessController(disable_ft)
-        self.server=actionlib.SimpleActionServer("process_step", ProcessStepAction, execute_cb=self.execute_cb, auto_start=False)
+        self.server=actionlib.ActionServer("process_step", ProcessStepAction, execute_cb=self.execute_cb,cancel_cb=self.cancel, auto_start=False)
+        #TODO make goal cancelling of goal handle start here
         self.server.start()
+        self.previous_goal=None
+        
+    def cancel(self):
+        self.previous_goal.set_cancelled()
         
     def execute_cb(self, goal):
         
         command = goal.command
-
+        self.previous_goal=goal
         if command == "plan_pickup_prepare":
             self.controller.plan_pickup_prepare(goal.target)
         elif command == "stop_motion":
@@ -95,12 +100,14 @@ class ProcessControllerServer(object):
         else:
             assert False, "Invalid command"
 
+        
         res = ProcessStepResult()
         res.state=self.controller.state
         res.target=self.controller.current_target if self.controller.current_target is not None else ""
         res.payload=self.controller.current_payload if self.controller.current_payload is not None else ""
         
         self.server.set_succeeded(res)
+        
             
 def process_controller_server_main():
     rospy.init_node("process_controller_server")

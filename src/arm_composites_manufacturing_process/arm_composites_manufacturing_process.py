@@ -30,7 +30,7 @@ import numpy as np
 import copy
 import rospy
 import actionlib
-
+import rospkg
 import general_robotics_toolbox as rox
 import general_robotics_toolbox.urdf as urdf
 import general_robotics_toolbox.ros_msg as rox_msg
@@ -225,7 +225,7 @@ class ProcessController(object):
         goal=ExecuteTrajectoryGoal()
         goal.trajectory=self.plan_dictionary['pickup_prepare']
         self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-        self.execute_trajectory_action.wait_for_result()
+        #self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.async_execute(self.plan_dictionary['pickup_prepare'],result)
 
 
@@ -258,7 +258,7 @@ class ProcessController(object):
         goal=ExecuteTrajectoryGoal()
         goal.trajectory=self.plan_dictionary['pickup_lower']
         self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-        self.execute_trajectory_action.wait_for_result()
+        #self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.execute(self.plan_dictionary['pickup_lower'])
 
 
@@ -287,7 +287,7 @@ class ProcessController(object):
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_grab_first_step']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-            self.execute_trajectory_action.wait_for_result()
+            #self.execute_trajectory_action.wait_for_result()
             #self.controller_commander.execute(self.plan_dictionary['pickup_grab_first_step'])
         except Exception as err:
             print err
@@ -332,7 +332,7 @@ class ProcessController(object):
         goal=ExecuteTrajectoryGoal()
         goal.trajectory=self.plan_dictionary['pickup_grab_second_step']
         self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-        self.execute_trajectory_action.wait_for_result()
+        #self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.execute(self.plan_dictionary['pickup_grab_second_step'])
 
 
@@ -368,7 +368,7 @@ class ProcessController(object):
         goal.trajectory=self.plan_dictionary['pickup_raise']
         self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
         #self.controller_commander.async_execute(self.plan_dictionary['pickup_raise'],result)
-        self.execute_trajectory_action.wait_for_result()
+        #self.execute_trajectory_action.wait_for_result()
 
     def plan_transport_payload(self, target):
         
