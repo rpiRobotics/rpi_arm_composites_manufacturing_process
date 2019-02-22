@@ -103,7 +103,6 @@ class ProcessControllerServer(object):
             goal.set_rejected()
             assert False, "Invalid command"
             
-
         
         res = ProcessStepResult()
         res.state=self.controller.state

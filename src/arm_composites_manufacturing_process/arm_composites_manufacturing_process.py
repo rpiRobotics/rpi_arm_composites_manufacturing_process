@@ -38,7 +38,7 @@ from general_robotics_toolbox import ros_tf as tf
 
 import rpi_abb_irc5.ros.rapid_commander as rapid_node_pkg
 import safe_kinematic_controller.ros.commander as controller_commander_pkg
-from rpi_arm_composites_manufacturing_process.msg import ProcessState
+from rpi_arm_composites_manufacturing_process.msg import ProcessState, ProcessStepFeedback
 from object_recognition_msgs.msg import ObjectRecognitionAction, ObjectRecognitionGoal
 
 from industrial_payload_manager.payload_transform_listener import PayloadTransformListener
@@ -48,7 +48,7 @@ import time
 import sys
 from moveit_msgs.msg import ExecuteTrajectoryAction, ExecuteTrajectoryGoal, MoveItErrorCodes
 import os
-from rpi_arm_composites_manufacturing_process.msg import  ProcessState
+
 import threading
 from moveit_commander import PlanningSceneInterface
 import traceback
@@ -190,7 +190,6 @@ class ProcessController(object):
         ret_code=subprocess_handle.returncode
         self.publish_process_state()
     	
-
     def plan_pickup_prepare(self, target_payload):
         
         #TODO: check state and payload
@@ -219,8 +218,10 @@ class ProcessController(object):
             rospy.loginfo("Finish pickup prepare for payload %s", target_payload)
             self.publish_process_state()
         except Exception as err:
-            goal_handle.publish_feedback(str(err))
-            goal_handle.set_aborted()
+            feedback=ProcessStepFeedback()
+            feedback.error_msg=str(err)
+            self.goal_handle.publish_feedback(feedback)
+            self.goal_handle.set_aborted()
 
     def move_pickup_prepare(self):
         try:
@@ -234,8 +235,8 @@ class ProcessController(object):
             #self.execute_trajectory_action.wait_for_result()
             #self.controller_commander.async_execute(self.plan_dictionary['pickup_prepare'],result)
         except Exception as err:
-            goal_handle.publish_feedback(str(err))
-            goal_handle.set_aborted()
+            self.goal_handle.publish_feedback(str(err))
+            self.goal_handle.set_aborted()
 
     def plan_pickup_lower(self):
 
@@ -256,8 +257,8 @@ class ProcessController(object):
             rospy.loginfo("Finish pickup_lower for payload %s", self.current_target)
             self.publish_process_state()
         except Exception as err:
-            goal_handle.publish_feedback(str(err))
-            goal_handle.set_aborted()
+            self.goal_handle.publish_feedback(str(err))
+            self.goal_handle.set_aborted()
 
     def move_pickup_lower(self):
         try:
@@ -273,8 +274,8 @@ class ProcessController(object):
         #self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.execute(self.plan_dictionary['pickup_lower'])
         except Exception as err:
-            goal_handle.publish_feedback(str(err))
-            goal_handle.set_aborted()
+            self.goal_handle.publish_feedback(str(err))
+            self.goal_handle.set_aborted()
 
     def plan_pickup_grab_first_step(self):
         #TODO: check change state and target
@@ -290,8 +291,8 @@ class ProcessController(object):
             self.plan_dictionary['pickup_grab_first_step']=path
             self.publish_process_state()
         except Exception as err:
-            goal_handle.publish_feedback(str(err))
-            goal_handle.set_aborted()
+            self.goal_handle.publish_feedback(str(err))
+            self.goal_handle.set_aborted()
 
     def move_pickup_grab_first_step(self):
         self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [],\
@@ -340,8 +341,8 @@ class ProcessController(object):
             rospy.loginfo("Finish pickup_grab for payload %s", self.current_target)
             self.publish_process_state()
         except Exception as err:
-            goal_handle.publish_feedback(str(err))
-            goal_handle.set_aborted()
+            self.goal_handle.publish_feedback(str(err))
+            self.goal_handle.set_aborted()
 
     def move_pickup_grab_second_step(self):
         try:
@@ -356,8 +357,8 @@ class ProcessController(object):
             #self.execute_trajectory_action.wait_for_result()
             #self.controller_commander.execute(self.plan_dictionary['pickup_grab_second_step'])
         except Exception as err:
-            goal_handle.publish_feedback(str(err))
-            goal_handle.set_aborted()
+            self.goal_handle.publish_feedback(str(err))
+            self.goal_handle.set_aborted()
 
     def plan_pickup_raise(self):
         
@@ -373,7 +374,7 @@ class ProcessController(object):
             pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
 
 
-              
+            
             path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
             
             self.state="plan_pickup_raise"
@@ -381,8 +382,8 @@ class ProcessController(object):
             rospy.loginfo("Finish pickup_raise for payload %s", self.current_target)
             self.publish_process_state()
         except Exception as err:
-            goal_handle.publish_feedback(str(err))
-            goal_handle.set_aborted()
+            self.goal_handle.publish_feedback(str(err))
+            self.goal_handle.set_aborted()
 
     def move_pickup_raise(self):
         try:
@@ -397,8 +398,8 @@ class ProcessController(object):
             #self.controller_commander.async_execute(self.plan_dictionary['pickup_raise'],result)
             #self.execute_trajectory_action.wait_for_result()
         except Exception as err:
-            goal_handle.publish_feedback(str(err))
-            goal_handle.set_aborted()
+            self.goal_handle.publish_feedback(str(err))
+            self.goal_handle.set_aborted()
         
     def plan_transport_payload(self, target):
         
