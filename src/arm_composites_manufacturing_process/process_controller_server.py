@@ -47,6 +47,7 @@ class ProcessControllerServer(object):
         goal.set_accepted()
         command = goal.get_goal().command
         target = goal.get_goal().target
+        self.controller.goal_handle=goal
         self.previous_goal=goal
         if command == "plan_pickup_prepare":
             self.controller.plan_pickup_prepare(target)

@@ -90,6 +90,7 @@ class ProcessController(object):
 
         self.update_payload_pose_srv=rospy.ServiceProxy("update_payload_pose", UpdatePayloadPose)
         self.get_payload_array_srv=rospy.ServiceProxy("get_payload_array", GetPayloadArray)
+        self.goal_handle=None
         self.subprocess_handle=None
         self.plan_dictionary={}
     
@@ -193,89 +194,104 @@ class ProcessController(object):
     def plan_pickup_prepare(self, target_payload):
         
         #TODO: check state and payload
-        
-        rospy.loginfo("Begin pickup_prepare for payload %s", target_payload)
-        
-        object_target, object_pose=self._vision_get_object_gripper_target_pose(target_payload)
-        
-        self._update_payload_pose(target_payload, object_pose,parent_frame_id="pickup_nest", confidence=0.8)
-        
-        rospy.loginfo("Found payload %s at pose %s", target_payload, object_target)
-        
-        self.pose_target=copy.deepcopy(object_target)
-        pose_target=self.pose_target
-        pose_target.p[2] += 0.5
-        
-        rospy.loginfo("Prepare pickup %s at pose %s", target_payload, object_target)
-        print pose_target.p
+        try:
+            rospy.loginfo("Begin pickup_prepare for payload %s", target_payload)
+            
+            object_target, object_pose=self._vision_get_object_gripper_target_pose(target_payload)
+            
+            self._update_payload_pose(target_payload, object_pose,parent_frame_id="pickup_nest", confidence=0.8)
+            
+            rospy.loginfo("Found payload %s at pose %s", target_payload, object_target)
+            
+            self.pose_target=copy.deepcopy(object_target)
+            pose_target=self.pose_target
+            pose_target.p[2] += 0.5
+            
+            rospy.loginfo("Prepare pickup %s at pose %s", target_payload, object_target)
+            print pose_target.p
 
-        path=self.controller_commander.plan(pose_target)
+            path=self.controller_commander.plan(pose_target)
 
-        self.current_target=target_payload
-        self.state="plan_pickup_prepare"
-        self.plan_dictionary['pickup_prepare']=path
-        
-        rospy.loginfo("Finish pickup prepare for payload %s", target_payload)
-        self.publish_process_state()
+            self.current_target=target_payload
+            self.state="plan_pickup_prepare"
+            self.plan_dictionary['pickup_prepare']=path
+            
+            rospy.loginfo("Finish pickup prepare for payload %s", target_payload)
+            self.publish_process_state()
+        except Exception as err:
+            goal_handle.publish_feedback(str(err))
+            goal_handle.set_aborted()
 
     def move_pickup_prepare(self):
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
-        result=None
-        
-        self.state="pickup_prepare"
-        goal=ExecuteTrajectoryGoal()
-        goal.trajectory=self.plan_dictionary['pickup_prepare']
-        self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-        #self.execute_trajectory_action.wait_for_result()
-        #self.controller_commander.async_execute(self.plan_dictionary['pickup_prepare'],result)
-
+        try:
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
+            result=None
+            
+            self.state="pickup_prepare"
+            goal=ExecuteTrajectoryGoal()
+            goal.trajectory=self.plan_dictionary['pickup_prepare']
+            self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+            #self.execute_trajectory_action.wait_for_result()
+            #self.controller_commander.async_execute(self.plan_dictionary['pickup_prepare'],result)
+        except Exception as err:
+            goal_handle.publish_feedback(str(err))
+            goal_handle.set_aborted()
 
     def plan_pickup_lower(self):
 
         #TODO: check change state and target
-        
-        rospy.loginfo("Begin pickup_lower for payload %s", self.current_target)
-        
+        try:
+            rospy.loginfo("Begin pickup_lower for payload %s", self.current_target)
+            
 
-        object_target, _=self._tf_get_object_gripper_target_pose(self.current_target)
-        pose_target2=copy.deepcopy(object_target)
-        pose_target2.p[2] += 0.15    
-        print pose_target2.p
+            object_target, _=self._tf_get_object_gripper_target_pose(self.current_target)
+            pose_target2=copy.deepcopy(object_target)
+            pose_target2.p[2] += 0.15    
+            print pose_target2.p
 
-        path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+            path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
 
-        self.state="plan_pickup_lower"
-        self.plan_dictionary['pickup_lower']=path
-        rospy.loginfo("Finish pickup_lower for payload %s", self.current_target)
-        self.publish_process_state()
+            self.state="plan_pickup_lower"
+            self.plan_dictionary['pickup_lower']=path
+            rospy.loginfo("Finish pickup_lower for payload %s", self.current_target)
+            self.publish_process_state()
+        except Exception as err:
+            goal_handle.publish_feedback(str(err))
+            goal_handle.set_aborted()
 
     def move_pickup_lower(self):
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], self.get_payload_pickup_ft_threshold(self.current_target))
-        result=None
-        rospy.loginfo("moving_pickup_lower")
-        if(self.state!="plan_pickup_lower"):
-            self.plan_pickup_lower()
-        self.state="pickup_lower"
-        goal=ExecuteTrajectoryGoal()
-        goal.trajectory=self.plan_dictionary['pickup_lower']
-        self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+        try:
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], self.get_payload_pickup_ft_threshold(self.current_target))
+            result=None
+            rospy.loginfo("moving_pickup_lower")
+            if(self.state!="plan_pickup_lower"):
+                self.plan_pickup_lower()
+            self.state="pickup_lower"
+            goal=ExecuteTrajectoryGoal()
+            goal.trajectory=self.plan_dictionary['pickup_lower']
+            self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
         #self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.execute(self.plan_dictionary['pickup_lower'])
-
+        except Exception as err:
+            goal_handle.publish_feedback(str(err))
+            goal_handle.set_aborted()
 
     def plan_pickup_grab_first_step(self):
         #TODO: check change state and target
-        
-        rospy.loginfo("Begin pickup_grab for payload %s", self.current_target)
-               
-        self.object_target, _=self._tf_get_object_gripper_target_pose(self.current_target)
-        pose_target2=copy.deepcopy(self.object_target)
-        pose_target2.p[2] -= 0.15   
+        try:
+            rospy.loginfo("Begin pickup_grab for payload %s", self.current_target)
+                   
+            self.object_target, _=self._tf_get_object_gripper_target_pose(self.current_target)
+            pose_target2=copy.deepcopy(self.object_target)
+            pose_target2.p[2] -= 0.15   
 
-        path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
-        self.state="plan_pickup_grab_first_step"
-        self.plan_dictionary['pickup_grab_first_step']=path
-        self.publish_process_state()
+            path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+            self.state="plan_pickup_grab_first_step"
+            self.plan_dictionary['pickup_grab_first_step']=path
+            self.publish_process_state()
+        except Exception as err:
+            goal_handle.publish_feedback(str(err))
+            goal_handle.set_aborted()
 
     def move_pickup_grab_first_step(self):
         self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [],\
@@ -295,82 +311,95 @@ class ProcessController(object):
 
 
     def plan_pickup_grab_second_step(self):
-        self.rapid_node.set_digital_io("Vacuum_enable", 1)
-        time.sleep(1)        
-        
-        #TODO: check vacuum feedback to make sure we have the panel
-        
-        world_to_panel_tf=self.tf_listener.lookupTransform("world", self.current_target, rospy.Time(0))
-        world_to_gripper_tf=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
-        panel_to_gripper_tf=world_to_gripper_tf.inv()*world_to_panel_tf
+        try:
+            self.rapid_node.set_digital_io("Vacuum_enable", 1)
+            time.sleep(1)        
+            
+            #TODO: check vacuum feedback to make sure we have the panel
+            
+            world_to_panel_tf=self.tf_listener.lookupTransform("world", self.current_target, rospy.Time(0))
+            world_to_gripper_tf=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
+            panel_to_gripper_tf=world_to_gripper_tf.inv()*world_to_panel_tf
 
-        self.current_payload=self.current_target
-        self.current_target=None
-        
-        self._update_payload_pose(self.current_payload, panel_to_gripper_tf, "vacuum_gripper_tool", 0.5)
-        self.controller_commander.set_controller_mode(self.controller_commander.MODE_HALT,1,[],[])
-        time.sleep(1)
+            self.current_payload=self.current_target
+            self.current_target=None
+            
+            self._update_payload_pose(self.current_payload, panel_to_gripper_tf, "vacuum_gripper_tool", 0.5)
+            self.controller_commander.set_controller_mode(self.controller_commander.MODE_HALT,1,[],[])
+            time.sleep(1)
 
-        pose_target2=copy.deepcopy(self.object_target)
-        pose_target2.p[2] += 0.15   
-        
+            pose_target2=copy.deepcopy(self.object_target)
+            pose_target2.p[2] += 0.15   
+            
 
-          
-        path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+              
+            path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
 
-        self.state="plan_pickup_grab_second_step"
-        self.plan_dictionary['pickup_grab_second_step']=path
-        rospy.loginfo("Finish pickup_grab for payload %s", self.current_target)
-        self.publish_process_state()
+            self.state="plan_pickup_grab_second_step"
+            self.plan_dictionary['pickup_grab_second_step']=path
+            rospy.loginfo("Finish pickup_grab for payload %s", self.current_target)
+            self.publish_process_state()
+        except Exception as err:
+            goal_handle.publish_feedback(str(err))
+            goal_handle.set_aborted()
 
     def move_pickup_grab_second_step(self):
-
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar,[], [])
-        result=None
-        if(self.state!="plan_pickup_grab_second_step"):
-            self.plan_pickup_grab_second_step()
-        self.state="pickup_grab_second_step"
-        goal=ExecuteTrajectoryGoal()
-        goal.trajectory=self.plan_dictionary['pickup_grab_second_step']
-        self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-        #self.execute_trajectory_action.wait_for_result()
-        #self.controller_commander.execute(self.plan_dictionary['pickup_grab_second_step'])
-
+        try:
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar,[], [])
+            result=None
+            if(self.state!="plan_pickup_grab_second_step"):
+                self.plan_pickup_grab_second_step()
+            self.state="pickup_grab_second_step"
+            goal=ExecuteTrajectoryGoal()
+            goal.trajectory=self.plan_dictionary['pickup_grab_second_step']
+            self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+            #self.execute_trajectory_action.wait_for_result()
+            #self.controller_commander.execute(self.plan_dictionary['pickup_grab_second_step'])
+        except Exception as err:
+            goal_handle.publish_feedback(str(err))
+            goal_handle.set_aborted()
 
     def plan_pickup_raise(self):
         
         #TODO: check change state and target
-        
-        rospy.loginfo("Begin pickup_raise for payload %s", self.current_payload)
-        
-        #Just use gripper position for now, think up a better way in future
-        object_target=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
-        pose_target2=copy.deepcopy(object_target)
-        pose_target2.p[2] += 0.8
-        pose_target2.p = np.array([-0.02285,-1.840,1.0])
-        pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
+        try:
+            rospy.loginfo("Begin pickup_raise for payload %s", self.current_payload)
+            
+            #Just use gripper position for now, think up a better way in future
+            object_target=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
+            pose_target2=copy.deepcopy(object_target)
+            pose_target2.p[2] += 0.8
+            pose_target2.p = np.array([-0.02285,-1.840,1.0])
+            pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
 
 
-          
-        path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
-        
-        self.state="plan_pickup_raise"
-        self.plan_dictionary['pickup_raise']=path
-        rospy.loginfo("Finish pickup_raise for payload %s", self.current_target)
-        self.publish_process_state()
+              
+            path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+            
+            self.state="plan_pickup_raise"
+            self.plan_dictionary['pickup_raise']=path
+            rospy.loginfo("Finish pickup_raise for payload %s", self.current_target)
+            self.publish_process_state()
+        except Exception as err:
+            goal_handle.publish_feedback(str(err))
+            goal_handle.set_aborted()
 
     def move_pickup_raise(self):
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
-        result=None
-        if(self.state!="plan_pickup_raise"):
-            self.plan_pickup_raise()
-        self.state="pickup_raise"
-        goal=ExecuteTrajectoryGoal()
-        goal.trajectory=self.plan_dictionary['pickup_raise']
-        self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-        #self.controller_commander.async_execute(self.plan_dictionary['pickup_raise'],result)
-        #self.execute_trajectory_action.wait_for_result()
-
+        try:
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
+            result=None
+            if(self.state!="plan_pickup_raise"):
+                self.plan_pickup_raise()
+            self.state="pickup_raise"
+            goal=ExecuteTrajectoryGoal()
+            goal.trajectory=self.plan_dictionary['pickup_raise']
+            self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+            #self.controller_commander.async_execute(self.plan_dictionary['pickup_raise'],result)
+            #self.execute_trajectory_action.wait_for_result()
+        except Exception as err:
+            goal_handle.publish_feedback(str(err))
+            goal_handle.set_aborted()
+        
     def plan_transport_payload(self, target):
         
         #TODO: check state and payload
