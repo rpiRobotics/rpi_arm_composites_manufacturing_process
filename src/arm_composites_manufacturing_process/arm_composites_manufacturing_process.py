@@ -93,6 +93,9 @@ class ProcessController(object):
         self.goal_handle=None
         self.subprocess_handle=None
         self.plan_dictionary={}
+        self.process_starts={}
+        self.process_index=None
+        self.process_states=["reset_position","pickup_prepare","pickup_lower","pickup_grab_first_step","pickup_grab_second_step","pickup_raise","transport_payload","place_payload"]
     
     def _vision_get_object_pose(self, key):
         self.overhead_vision_client.wait_for_server()
@@ -142,9 +145,9 @@ class ProcessController(object):
 
     def _finished_client(self,state,result):
         #if(state== actionlib.GoalStatus.SUCCEEDED):
-
+        rospy.loginfo("MoveItErrorCode generated: %s",str(result))
         self.publish_process_state()
-        if(result!=MoveItErrorCodes.SUCCESS):
+        if(result==1):
             rospy.loginfo(MoveItErrorCodes.SUCCESS)
             rospy.loginfo("MoveItErrorCode generated: %s",str(result))
 
@@ -158,11 +161,30 @@ class ProcessController(object):
         self.execute_trajectory_action.cancel_all_goals()
         if(self.state in ["reset_position","transport_payload","place_panel"]):
             self.subprocess_handle.terminate()
-
+    
+    def rewind_motion(self):
+        if(self.process_index!=None and self.process_index!=0):
+            rewind_target_pose=self.process_starts[self.process_states[self.process_index]]
+            path=self.controller_commander.plan(rewind_target_pose)
+            try:
+                goal=ExecuteTrajectoryGoal()
+                goal.trajectory=path
+                self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+                self.process_index-=1
+                self.state=self.process_states[process_index]
+                
+            except Exception as err:
+                self.goal_handle.publish_feedback(str(err))
+                self.goal_handle.set_aborted()
+            
+            
+    
     def reset_position(self):
         #TODO: Implement reset movement in process controller
         rospy.loginfo("Planning to reset position")
         self.state="reset_position"
+        self.process_index=0
+        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
         subprocess_handle=subprocess.Popen(['python', self.reset_code])
         subprocess_handle.wait()
         ret_code=subprocess_handle.returncode
@@ -170,6 +192,8 @@ class ProcessController(object):
         
     def transport_payload(self, target_payload):
         self.state="transport_payload"
+        self.process_index=6
+        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
         self.current_target=target_payload
         if(target_payload=="leeward_mid_panel"):
             subprocess_handle=subprocess.Popen(['python', self.YC_transport_code, 'leeward_mid_panel'])
@@ -181,6 +205,8 @@ class ProcessController(object):
     	
     def place_panel(self, target_payload):
         self.state="place_panel"
+        self.process_index=7
+        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
         self.current_target=target_payload
         if(target_payload=="leeward_mid_panel"):
             subprocess_handle=subprocess.Popen(['python', self.YC_place_code])
@@ -208,7 +234,7 @@ class ProcessController(object):
             
             rospy.loginfo("Prepare pickup %s at pose %s", target_payload, object_target)
             print pose_target.p
-
+            
             path=self.controller_commander.plan(pose_target)
 
             self.current_target=target_payload
@@ -229,9 +255,12 @@ class ProcessController(object):
             result=None
             
             self.state="pickup_prepare"
+            self.process_index=1
+            self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_prepare']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+            
             #self.execute_trajectory_action.wait_for_result()
             #self.controller_commander.async_execute(self.plan_dictionary['pickup_prepare'],result)
         except Exception as err:
@@ -268,6 +297,8 @@ class ProcessController(object):
             if(self.state!="plan_pickup_lower"):
                 self.plan_pickup_lower()
             self.state="pickup_lower"
+            self.process_index=2
+            self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_lower']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
@@ -301,6 +332,8 @@ class ProcessController(object):
         if(self.state!="plan_pickup_grab_first_step"):
             self.plan_pickup_grab_first_step()
         self.state="pickup_grab_first_step"
+        self.process_index=3
+        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
         try:
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_grab_first_step']
@@ -351,6 +384,8 @@ class ProcessController(object):
             if(self.state!="plan_pickup_grab_second_step"):
                 self.plan_pickup_grab_second_step()
             self.state="pickup_grab_second_step"
+            self.process_index=4
+            self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_grab_second_step']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
@@ -392,6 +427,8 @@ class ProcessController(object):
             if(self.state!="plan_pickup_raise"):
                 self.plan_pickup_raise()
             self.state="pickup_raise"
+            self.process_index=5
+            self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_raise']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
@@ -419,7 +456,7 @@ class ProcessController(object):
         plan=self.controller_commander.plan(pose_target)
         
         self.current_target=target
-        self.state="plan_transport_panel"
+        self.state="plan_transport_payload"
         self.plan_dictionary['transport_payload']=plan
         rospy.loginfo("Finish transport_panel for payload %s to %s", self.current_payload, target)
         self.publish_process_state()
@@ -427,7 +464,7 @@ class ProcessController(object):
     def move_transport_payload(self):
         self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
         result=None
-        self.state="transport_panel"
+        self.state="transport_payload"
         self.controller_commander.async_execute(self.plan_dictionary['transport_payload'],result)
         self.publish_process_state()
 

@@ -99,6 +99,8 @@ class ProcessControllerServer(object):
             self.controller.transport_payload(target)
         elif command == "place_panel":
             self.controller.place_panel(target)
+        elif command == "rewind_motion":
+            self.controller.rewind_motion()
         else:
             goal.set_rejected()
             assert False, "Invalid command"
