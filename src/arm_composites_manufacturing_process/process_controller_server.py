@@ -105,13 +105,13 @@ class ProcessControllerServer(object):
             goal.set_rejected()
             assert False, "Invalid command"
             
+        if("move" not in command):
+            res = ProcessStepResult()
+            res.state=self.controller.state
+            res.target=self.controller.current_target if self.controller.current_target is not None else ""
+            res.payload=self.controller.current_payload if self.controller.current_payload is not None else ""
         
-        res = ProcessStepResult()
-        res.state=self.controller.state
-        res.target=self.controller.current_target if self.controller.current_target is not None else ""
-        res.payload=self.controller.current_payload if self.controller.current_payload is not None else ""
-        
-        goal.set_succeeded(res)
+            goal.set_succeeded(res)
         
             
 def process_controller_server_main():

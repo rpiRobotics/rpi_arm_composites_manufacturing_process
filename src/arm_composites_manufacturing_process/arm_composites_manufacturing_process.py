@@ -68,6 +68,7 @@ class ProcessControllerPayload(object):
 
 class ProcessController(object):
     def __init__(self, disable_ft=False):
+        #TODO add in synch or asynch option, if goal handle exists have callback but if synchronous 
         self.urdf=URDF.from_parameter_server()
         self.overhead_vision_client=actionlib.SimpleActionClient("recognize_objects", ObjectRecognitionAction)
         self.execute_trajectory_action=actionlib.SimpleActionClient("execute_trajectory",ExecuteTrajectoryAction)
@@ -145,17 +146,29 @@ class ProcessController(object):
 
     def _finished_client(self,state,result):
         #if(state== actionlib.GoalStatus.SUCCEEDED):
-        rospy.loginfo("MoveItErrorCode generated: %s",str(result))
-        self.publish_process_state()
-        if(result==1):
-            rospy.loginfo(MoveItErrorCodes.SUCCESS)
-            rospy.loginfo("MoveItErrorCode generated: %s",str(result))
+        rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
+        
+        if(result.error_code.val!=1):
+            feedback=ProcessStepFeedback()
+            feedback.error_msg=str(result)
+            self.goal_handle.publish_feedback(feedback)
+            self.goal_handle.set_aborted()
+            
+            rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
+        else:
+            self.publish_process_state()
+            res = ProcessStepResult()
+            res.state=self.state
+            res.target=self.current_target if self.current_target is not None else ""
+            res.payload=self.current_payload if self.current_payload is not None else ""
+        
+            goal.set_succeeded(res)
 
     def get_state(self):
         return self.state
     
     def get_current_pose(self):
-        return self.controller_commander.get_current_pose()
+        return self.controller_commander.get_current_pose_msg()
         
     def stop_motion(self):
         self.execute_trajectory_action.cancel_all_goals()
@@ -171,10 +184,12 @@ class ProcessController(object):
                 goal.trajectory=path
                 self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
                 self.process_index-=1
-                self.state=self.process_states[process_index]
+                self.state=self.process_states[self.process_index]
                 
             except Exception as err:
-                self.goal_handle.publish_feedback(str(err))
+                feedback=ProcessStepFeedback()
+                feedback.error_msg=str(err)
+                self.goal_handle.publish_feedback(feedback)
                 self.goal_handle.set_aborted()
             
             
@@ -241,7 +256,7 @@ class ProcessController(object):
             self.state="plan_pickup_prepare"
             self.plan_dictionary['pickup_prepare']=path
             
-            rospy.loginfo("Finish pickup prepare for payload %s", target_payload)
+            #rospy.loginfo("Finish pickup prepare for payload %s", target_payload)
             self.publish_process_state()
         except Exception as err:
             feedback=ProcessStepFeedback()
@@ -250,22 +265,24 @@ class ProcessController(object):
             self.goal_handle.set_aborted()
 
     def move_pickup_prepare(self):
-        try:
-            self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
-            result=None
+        #try:
+        self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
+        result=None
+        
+        self.state="pickup_prepare"
+        self.process_index=1
+        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
+        goal=ExecuteTrajectoryGoal()
+        goal.trajectory=self.plan_dictionary['pickup_prepare']
+        self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
             
-            self.state="pickup_prepare"
-            self.process_index=1
-            self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
-            goal=ExecuteTrajectoryGoal()
-            goal.trajectory=self.plan_dictionary['pickup_prepare']
-            self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-            
-            #self.execute_trajectory_action.wait_for_result()
+            #self.execute_trajectory_action.wait_for_result()  TODO integrate this as a synchronous wait option, check if goal handle then if not wait
             #self.controller_commander.async_execute(self.plan_dictionary['pickup_prepare'],result)
-        except Exception as err:
-            self.goal_handle.publish_feedback(str(err))
-            self.goal_handle.set_aborted()
+        #except Exception as err:
+        #feedback=ProcessStepFeedback()
+        #feedback.error_msg=str(err)
+        #self.goal_handle.publish_feedback(feedback)
+        #self.goal_handle.set_aborted()
 
     def plan_pickup_lower(self):
 
@@ -286,7 +303,9 @@ class ProcessController(object):
             rospy.loginfo("Finish pickup_lower for payload %s", self.current_target)
             self.publish_process_state()
         except Exception as err:
-            self.goal_handle.publish_feedback(str(err))
+            feedback=ProcessStepFeedback()
+            feedback.error_msg=str(err)
+            self.goal_handle.publish_feedback(feedback)
             self.goal_handle.set_aborted()
 
     def move_pickup_lower(self):
@@ -305,7 +324,9 @@ class ProcessController(object):
         #self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.execute(self.plan_dictionary['pickup_lower'])
         except Exception as err:
-            self.goal_handle.publish_feedback(str(err))
+            feedback=ProcessStepFeedback()
+            feedback.error_msg=str(err)
+            self.goal_handle.publish_feedback(feedback)
             self.goal_handle.set_aborted()
 
     def plan_pickup_grab_first_step(self):
@@ -322,7 +343,9 @@ class ProcessController(object):
             self.plan_dictionary['pickup_grab_first_step']=path
             self.publish_process_state()
         except Exception as err:
-            self.goal_handle.publish_feedback(str(err))
+            feedback=ProcessStepFeedback()
+            feedback.error_msg=str(err)
+            self.goal_handle.publish_feedback(feedback)
             self.goal_handle.set_aborted()
 
     def move_pickup_grab_first_step(self):
@@ -374,7 +397,9 @@ class ProcessController(object):
             rospy.loginfo("Finish pickup_grab for payload %s", self.current_target)
             self.publish_process_state()
         except Exception as err:
-            self.goal_handle.publish_feedback(str(err))
+            feedback=ProcessStepFeedback()
+            feedback.error_msg=str(err)
+            self.goal_handle.publish_feedback(feedback)
             self.goal_handle.set_aborted()
 
     def move_pickup_grab_second_step(self):
@@ -392,7 +417,9 @@ class ProcessController(object):
             #self.execute_trajectory_action.wait_for_result()
             #self.controller_commander.execute(self.plan_dictionary['pickup_grab_second_step'])
         except Exception as err:
-            self.goal_handle.publish_feedback(str(err))
+            feedback=ProcessStepFeedback()
+            feedback.error_msg=str(err)
+            self.goal_handle.publish_feedback(feedback)
             self.goal_handle.set_aborted()
 
     def plan_pickup_raise(self):
@@ -417,7 +444,9 @@ class ProcessController(object):
             rospy.loginfo("Finish pickup_raise for payload %s", self.current_target)
             self.publish_process_state()
         except Exception as err:
-            self.goal_handle.publish_feedback(str(err))
+            feedback=ProcessStepFeedback()
+            feedback.error_msg=str(err)
+            self.goal_handle.publish_feedback(feedback)
             self.goal_handle.set_aborted()
 
     def move_pickup_raise(self):
@@ -435,7 +464,9 @@ class ProcessController(object):
             #self.controller_commander.async_execute(self.plan_dictionary['pickup_raise'],result)
             #self.execute_trajectory_action.wait_for_result()
         except Exception as err:
-            self.goal_handle.publish_feedback(str(err))
+            feedback=ProcessStepFeedback()
+            feedback.error_msg=str(err)
+            self.goal_handle.publish_feedback(feedback)
             self.goal_handle.set_aborted()
         
     def plan_transport_payload(self, target):
