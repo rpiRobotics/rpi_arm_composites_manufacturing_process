@@ -105,6 +105,7 @@ class ProcessControllerServer(object):
             goal.set_rejected()
             assert False, "Invalid command"
             
+        rospy.loginfo(goal.get_goal_status())
         if("move" not in command):
             res = ProcessStepResult()
             res.state=self.controller.state

@@ -68,7 +68,7 @@ class ProcessControllerPayload(object):
 
 class ProcessController(object):
     def __init__(self, disable_ft=False):
-        #TODO add in synch or asynch option, if goal handle exists have callback but if synchronous 
+        
         self.urdf=URDF.from_parameter_server()
         self.overhead_vision_client=actionlib.SimpleActionClient("recognize_objects", ObjectRecognitionAction)
         self.execute_trajectory_action=actionlib.SimpleActionClient("execute_trajectory",ExecuteTrajectoryAction)
@@ -275,8 +275,9 @@ class ProcessController(object):
         goal=ExecuteTrajectoryGoal()
         goal.trajectory=self.plan_dictionary['pickup_prepare']
         self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+        if(self.goal_handle==None):
             
-            #self.execute_trajectory_action.wait_for_result()  TODO integrate this as a synchronous wait option, check if goal handle then if not wait
+            self.execute_trajectory_action.wait_for_result()  #TODO integrate this as a synchronous wait option, check if goal handle then if not wait
             #self.controller_commander.async_execute(self.plan_dictionary['pickup_prepare'],result)
         #except Exception as err:
         #feedback=ProcessStepFeedback()
@@ -321,6 +322,9 @@ class ProcessController(object):
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_lower']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+            if(self.goal_handle==None):
+            
+                self.execute_trajectory_action.wait_for_result()
         #self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.execute(self.plan_dictionary['pickup_lower'])
         except Exception as err:
@@ -361,6 +365,9 @@ class ProcessController(object):
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_grab_first_step']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+            if(self.goal_handle==None):
+            
+                self.execute_trajectory_action.wait_for_result()
             #self.execute_trajectory_action.wait_for_result()
             #self.controller_commander.execute(self.plan_dictionary['pickup_grab_first_step'])
         except Exception as err:
@@ -414,6 +421,9 @@ class ProcessController(object):
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_grab_second_step']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+            if(self.goal_handle==None):
+            
+                self.execute_trajectory_action.wait_for_result()
             #self.execute_trajectory_action.wait_for_result()
             #self.controller_commander.execute(self.plan_dictionary['pickup_grab_second_step'])
         except Exception as err:
@@ -461,6 +471,9 @@ class ProcessController(object):
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_raise']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+            if(self.goal_handle==None):
+            
+                self.execute_trajectory_action.wait_for_result()
             #self.controller_commander.async_execute(self.plan_dictionary['pickup_raise'],result)
             #self.execute_trajectory_action.wait_for_result()
         except Exception as err:
