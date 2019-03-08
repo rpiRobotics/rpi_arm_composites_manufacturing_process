@@ -38,7 +38,7 @@ from general_robotics_toolbox import ros_tf as tf
 
 import rpi_abb_irc5.ros.rapid_commander as rapid_node_pkg
 import safe_kinematic_controller.ros.commander as controller_commander_pkg
-from rpi_arm_composites_manufacturing_process.msg import ProcessState, ProcessStepFeedback
+from rpi_arm_composites_manufacturing_process.msg import ProcessState, ProcessStepFeedback, ProcessStepResult
 from object_recognition_msgs.msg import ObjectRecognitionAction, ObjectRecognitionGoal
 
 from industrial_payload_manager.payload_transform_listener import PayloadTransformListener
@@ -147,22 +147,22 @@ class ProcessController(object):
     def _finished_client(self,state,result):
         #if(state== actionlib.GoalStatus.SUCCEEDED):
         rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
-        
-        if(result.error_code.val!=1):
-            feedback=ProcessStepFeedback()
-            feedback.error_msg=str(result)
-            self.goal_handle.publish_feedback(feedback)
-            self.goal_handle.set_aborted()
+        if(self.goal_handle is not None):
+            if(result.error_code.val!=1):
+                feedback=ProcessStepFeedback()
+                feedback.error_msg=str(result)
+                self.goal_handle.publish_feedback(feedback)
+                self.goal_handle.set_aborted()
+                
+                rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
+            else:
+                self.publish_process_state()
+                res = ProcessStepResult()
+                res.state=self.state
+                res.target=self.current_target if self.current_target is not None else ""
+                res.payload=self.current_payload if self.current_payload is not None else ""
             
-            rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
-        else:
-            self.publish_process_state()
-            res = ProcessStepResult()
-            res.state=self.state
-            res.target=self.current_target if self.current_target is not None else ""
-            res.payload=self.current_payload if self.current_payload is not None else ""
-        
-            goal.set_succeeded(res)
+                self.goal_handle.set_succeeded(res)
 
     def get_state(self):
         return self.state
@@ -275,7 +275,7 @@ class ProcessController(object):
         goal=ExecuteTrajectoryGoal()
         goal.trajectory=self.plan_dictionary['pickup_prepare']
         self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-        if(self.goal_handle==None):
+        if(self.goal_handle is None):
             
             self.execute_trajectory_action.wait_for_result()  #TODO integrate this as a synchronous wait option, check if goal handle then if not wait
             #self.controller_commander.async_execute(self.plan_dictionary['pickup_prepare'],result)
@@ -322,7 +322,7 @@ class ProcessController(object):
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_lower']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-            if(self.goal_handle==None):
+            if(self.goal_handle is None):
             
                 self.execute_trajectory_action.wait_for_result()
         #self.execute_trajectory_action.wait_for_result()
@@ -365,7 +365,7 @@ class ProcessController(object):
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_grab_first_step']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-            if(self.goal_handle==None):
+            if(self.goal_handle is None):
             
                 self.execute_trajectory_action.wait_for_result()
             #self.execute_trajectory_action.wait_for_result()
@@ -421,7 +421,7 @@ class ProcessController(object):
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_grab_second_step']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-            if(self.goal_handle==None):
+            if(self.goal_handle is None):
             
                 self.execute_trajectory_action.wait_for_result()
             #self.execute_trajectory_action.wait_for_result()
@@ -471,7 +471,7 @@ class ProcessController(object):
             goal=ExecuteTrajectoryGoal()
             goal.trajectory=self.plan_dictionary['pickup_raise']
             self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-            if(self.goal_handle==None):
+            if(self.goal_handle is None):
             
                 self.execute_trajectory_action.wait_for_result()
             #self.controller_commander.async_execute(self.plan_dictionary['pickup_raise'],result)

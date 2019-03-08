@@ -8,13 +8,13 @@ import time
 def main():
     rospy.init_node("pick_and_place_panel", anonymous=True)
     
-    p=ProcessController(disable_ft=True)
+    p=ProcessController(disable_ft=False)
     
     # Wait for payload messages to arrive
     time.sleep(0.5)
     
     rospy.loginfo("Begin panel pick and place script")
-    p.plan_pickup_prepare('leeward_mid_panel')
+    p.plan_pickup_prepare('leeward_tip_panel')
     p.move_pickup_prepare()
     p.plan_pickup_lower()
     p.move_pickup_lower()
