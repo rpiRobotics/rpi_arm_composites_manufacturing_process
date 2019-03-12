@@ -60,12 +60,6 @@ from visualization_msgs.msg import Marker, MarkerArray
 import subprocess
 
 
-class ProcessControllerPayload(object):
-    def __init__(self, payload_msg, ros_id):
-        self.payload_msg=payload_msg
-        self.ros_id=ros_id
-        self.attached_link=None
-
 class ProcessController(object):
     def __init__(self, disable_ft=False):
         
