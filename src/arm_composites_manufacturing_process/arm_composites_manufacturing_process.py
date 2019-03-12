@@ -141,7 +141,8 @@ class ProcessController(object):
         return self._get_payload(payload).gripper_targets[0].pickup_ft_threshold
     
     def _active_client(self):
-        self.state="moving"
+        #self.state="moving"
+        pass
         #self.publish_process_state()
 
     def _finished_client(self,state,result):
@@ -149,12 +150,21 @@ class ProcessController(object):
         rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
         if(self.goal_handle is not None):
             if(result.error_code.val!=1):
-                feedback=ProcessStepFeedback()
-                feedback.error_msg=str(result)
-                self.goal_handle.publish_feedback(feedback)
-                self.goal_handle.set_aborted()
+                if(self.state=="pickup_grab_first_step"):
+                    self.publish_process_state()
+                    res = ProcessStepResult()
+                    res.state=self.state
+                    res.target=self.current_target if self.current_target is not None else ""
+                    res.payload=self.current_payload if self.current_payload is not None else ""
+                    self.goal_handle.set_succeeded(res)
+                else:
+                    
+                    feedback=ProcessStepFeedback()
+                    feedback.error_msg=str(result)
+                    self.goal_handle.publish_feedback(feedback)
+                    self.goal_handle.set_aborted()
                 
-                rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
+                    rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
             else:
                 self.publish_process_state()
                 res = ProcessStepResult()
