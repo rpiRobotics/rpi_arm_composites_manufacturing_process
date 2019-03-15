@@ -58,12 +58,21 @@ from urdf_parser_py.urdf import URDF
 from tf.msg import tfMessage
 from visualization_msgs.msg import Marker, MarkerArray
 import subprocess
-
+import tesseract
+from tesseract_msgs.msg import TesseractState
+from sensor_msgs.msg import JointState
 
 class ProcessController(object):
     def __init__(self, disable_ft=False):
-        
+        self.lock=threading.Lock()
+        urdf_xml_string = rospy.get_param("robot_description")
+        srdf_xml_string = rospy.get_param("robot_description_semantic")
         self.urdf=URDF.from_parameter_server()
+        self.tesseract_env=tesseract.KDLEnv()
+        self.tesseract_env.init(urdf_xml_string, srdf_xml_string)
+        self.tesseract_diff_sub=rospy.Subscriber("tesseract_diff", TesseractState, self._tesseract_diff_cb)
+        self.tesseract_plotter = tesseract.ROSBasicPlotting(self.tesseract_env)
+        self.tesseract_plotter.plotScene()        
         self.overhead_vision_client=actionlib.SimpleActionClient("recognize_objects", ObjectRecognitionAction)
         self.execute_trajectory_action=actionlib.SimpleActionClient("execute_trajectory",ExecuteTrajectoryAction)
         self.rapid_node = rapid_node_pkg.RAPIDCommander()
@@ -91,6 +100,10 @@ class ProcessController(object):
         self.process_starts={}
         self.process_index=None
         self.process_states=["reset_position","pickup_prepare","pickup_lower","pickup_grab_first_step","pickup_grab_second_step","pickup_raise","transport_payload","place_payload"]
+    
+    def _tesseract_diff_cb(self, msg):
+        with self.lock:
+            tesseract.processTesseractStateMsg(self.tesseract_env, msg)
     
     def _vision_get_object_pose(self, key):
         self.overhead_vision_client.wait_for_server()
@@ -254,7 +267,7 @@ class ProcessController(object):
             rospy.loginfo("Prepare pickup %s at pose %s", target_payload, object_target)
             print pose_target.p
             
-            path=self.controller_commander.plan(pose_target)
+            path=self._trajopt_plan(pose_target)
 
             self.current_target=target_payload
             self.state="plan_pickup_prepare"
@@ -679,3 +692,154 @@ class ProcessController(object):
         
         return payload_array_res.payload_array.payloads[0]
 
+
+    def _trajopt_plan(self, target_pose, waypoints_pose=[], speed_scalar=0.5):
+        
+        with self.lock:
+        
+            robot = self.controller_commander.rox_robot
+            
+            vel_upper_lim = np.array(robot.joint_vel_limit) * speed_scalar
+            vel_lower_lim = -vel_upper_lim
+            joint_lower_limit = np.array(robot.joint_lower_limit)
+            joint_upper_limit = np.array(robot.joint_upper_limit)
+            joint_names = robot.joint_names
+            #joint_positions = self.controller_commander.get_current_joint_values()
+            joint_state_msg=rospy.wait_for_message("joint_states", JointState)
+            joint_positions=np.array(joint_state_msg.position, dtype=np.float64)
+            
+            self.tesseract_env.setState(joint_names, joint_positions)
+            
+            init_pos = self.tesseract_env.getCurrentJointValues()
+            self.tesseract_plotter.plotTrajectory(self.tesseract_env.getJointNames(), np.reshape(init_pos,(1,6)));
+        
+            planner = tesseract.TrajOptPlanner()
+            
+            manip="move_group"
+            end_effector="vacuum_gripper_tool"
+            
+            pci = tesseract.ProblemConstructionInfo(self.tesseract_env)
+    
+            pci.kin = self.tesseract_env.getManipulator(manip)
+            
+            pci.basic_info.n_steps = 50
+            pci.basic_info.manip = manip
+            pci.basic_info.dt_lower_lim = 1
+            pci.basic_info.dt_upper_lim = 10
+            pci.basic_info.start_fixed = True
+            pci.basic_info.use_time = True
+            
+            pci.init_info.type = tesseract.InitInfo.STATIONARY
+            #pci.init_info.dt=0.5
+            
+            if True:
+                collision = tesseract.CollisionTermInfo()
+                collision.name = "collision"
+                collision.term_type = tesseract.TT_COST
+                collision.continuous = True
+                collision.first_step = 0
+                collision.last_step = pci.basic_info.n_steps - 1
+                collision.gap = 1
+                collision.info = tesseract.createSafetyMarginDataVector(pci.basic_info.n_steps, 0.025, 40)
+                pci.cost_infos.append(collision)
+            
+            if True:
+                jv = tesseract.JointVelTermInfo()
+                jv.targets = tesseract.DblVec([0.0]*6)
+                jv.coeffs = tesseract.DblVec([500.0]*6)
+                jv.term_type = tesseract.TT_COST
+                jv.first_step = 0
+                jv.last_step = pci.basic_info.n_steps - 1
+                jv.name = "joint_velocity_cost"
+                pci.cost_infos.append(jv)
+        
+            if True:
+                jv = tesseract.JointAccTermInfo()
+                jv.targets = tesseract.DblVec([0.0]*6)
+                jv.coeffs = tesseract.DblVec([2000.0]*6)
+                jv.term_type = tesseract.TT_COST
+                jv.first_step = 0
+                jv.last_step = pci.basic_info.n_steps - 1
+                jv.name = "joint_acc_cost"                
+                pci.cost_infos.append(jv)
+                
+            if True:
+                jv = tesseract.JointJerkTermInfo()
+                jv.targets = tesseract.DblVec([0.0]*6)
+                jv.coeffs = tesseract.DblVec([5.0]*6)
+                jv.term_type = tesseract.TT_COST
+                jv.first_step = 0
+                jv.last_step = pci.basic_info.n_steps - 1
+                jv.name = "joint_jerk_cost"                
+                pci.cost_infos.append(jv)
+        
+            if True:        
+                jv = tesseract.JointVelTermInfo()
+                jv.targets = tesseract.DblVec([0.0]*6)
+                jv.coeffs = tesseract.DblVec([50000.0]*6)
+                jv.lower_tols = tesseract.DblVec(vel_lower_lim)
+                jv.upper_tols = tesseract.DblVec(vel_upper_lim)
+                jv.term_type = tesseract.TT_CNT | tesseract.TT_USE_TIME
+                jv.first_step = 0
+                jv.last_step = pci.basic_info.n_steps - 1
+                jv.name = "joint_velocity_cnt"
+                pci.cnt_infos.append(jv)
+                
+            if True:
+                pose_constraint = tesseract.CartPoseTermInfo()
+                pose_constraint.term_type = tesseract.TT_CNT
+                pose_constraint.link = end_effector
+                pose_constraint.timestep = pci.basic_info.n_steps-1
+                
+                q=rox.R2q(target_pose.R)
+                
+                pose_constraint.wxyz = np.array(q)
+                pose_constraint.xyz = target_pose.p
+                pose_constraint.pos_coefs = np.array([10,10,10], dtype=np.float64)
+                pose_constraint.rot_coefs = np.array([10,10,10], dtype=np.float64)
+                pose_constraint.name = "final_pose"
+                pci.cnt_infos.push_back(pose_constraint)
+        
+            if True:        
+                jv = tesseract.JointVelTermInfo()
+                jv.targets = tesseract.DblVec([0.0]*6)
+                jv.coeffs = tesseract.DblVec([10000.0]*6)                
+                jv.term_type = tesseract.TT_COST
+                jv.first_step = pci.basic_info.n_steps - 1
+                jv.last_step = pci.basic_info.n_steps - 1
+                jv.name = "joint_velocity_final_cost"
+                pci.cost_infos.append(jv)
+        
+            if True:        
+                jv = tesseract.JointVelTermInfo()
+                jv.targets = tesseract.DblVec([0.0]*6)
+                jv.coeffs = tesseract.DblVec([10000.0]*6)                
+                jv.term_type = tesseract.TT_COST
+                jv.first_step = 0
+                jv.last_step = 1
+                jv.name = "joint_velocity_initial_cost"
+                pci.cost_infos.append(jv)
+        
+            if True:
+                time_cost = tesseract.TotalTimeTermInfo()
+                time_cost.name = "time_cost"
+                time_cost.coeff = 5                
+                time_cost.term_type = tesseract.TT_COST
+                pci.cost_infos.append(time_cost)
+                
+            prob = tesseract.ConstructProblem(pci)
+            
+            config = tesseract.TrajOptPlannerConfig(prob)
+            
+            config.params.max_iter = 1000
+            
+            planning_response = planner.solve(config)
+            
+            self.tesseract_plotter.plotTrajectory(self.tesseract_env.getJointNames(), planning_response.trajectory[:,0:6])
+            print np.rad2deg(planning_response.trajectory[:,1])
+            print np.rad2deg(planning_response.trajectory[:,2])
+            print np.cumsum(1.0/planning_response.trajectory[:,6])
+            
+            import matplotlib.pyplot as plt
+            plt.plot(np.cumsum(1.0/planning_response.trajectory[:,6]), np.rad2deg(planning_response.trajectory[:,1]), 'x' )
+            plt.show()
