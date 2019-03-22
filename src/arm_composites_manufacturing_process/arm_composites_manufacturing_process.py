@@ -177,7 +177,7 @@ class ProcessController(object):
             
             
     
-    def reset_position(self, goal):
+    def reset_position(self, goal = None):
         
         self._begin_step(goal)
         try:            
@@ -202,7 +202,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
             	
-    def place_panel(self, target_payload, goal):
+    def place_panel(self, target_payload, goal = None):
         self.state="place_panel"
         self.process_index=7
         self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
@@ -215,7 +215,7 @@ class ProcessController(object):
         ret_code=subprocess_handle.returncode
         self.publish_process_state()
     	
-    def plan_pickup_prepare(self, target_payload, goal):
+    def plan_pickup_prepare(self, target_payload, goal = None):
         
         self._begin_step(goal)
         try:
@@ -246,7 +246,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_pickup_prepare(self, goal):
+    def move_pickup_prepare(self, goal = None):
         self._begin_step(goal)
         try:
             self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
@@ -261,7 +261,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def plan_pickup_lower(self, goal):
+    def plan_pickup_lower(self, goal = None):
 
         #TODO: check change state and target
         self._begin_step(goal)
@@ -285,7 +285,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_pickup_lower(self, goal):
+    def move_pickup_lower(self, goal = None):
         self._begin_step(goal)
         try:
             self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], self.get_payload_pickup_ft_threshold(self.current_target))
@@ -305,7 +305,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def plan_pickup_grab_first_step(self, goal):
+    def plan_pickup_grab_first_step(self, goal = None):
         #TODO: check change state and target
         self._begin_step(goal)
         try:
@@ -324,7 +324,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_pickup_grab_first_step(self, goal):
+    def move_pickup_grab_first_step(self, goal = None):
         
         self._begin_step(goal)
         
@@ -344,7 +344,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def plan_pickup_grab_second_step(self, goal):
+    def plan_pickup_grab_second_step(self, goal = None):
         self._begin_step(goal)
         try:
             self.rapid_node.set_digital_io("Vacuum_enable", 1)
@@ -380,7 +380,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_pickup_grab_second_step(self, goal):
+    def move_pickup_grab_second_step(self, goal = None):
         self._begin_step(goal)
         try:
             self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], [])
@@ -397,7 +397,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def plan_pickup_raise(self, goal):
+    def plan_pickup_raise(self, goal = None):
         
         #TODO: check change state and target
         self._begin_step(goal)
@@ -421,7 +421,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_pickup_raise(self, goal):
+    def move_pickup_raise(self, goal = None):
         self._begin_step(goal)
         try:
             self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
@@ -438,7 +438,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
         
-    def plan_transport_payload(self, target, goal):
+    def plan_transport_payload(self, target, goal = None):
         
         #TODO: check state and payload
         
@@ -467,7 +467,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_transport_payload(self, goal):
+    def move_transport_payload(self, goal = None):
         self._begin_step(goal)
         try:
             self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], []) 
@@ -528,7 +528,7 @@ class ProcessController(object):
                     feedback=ProcessStepFeedback()
                     feedback.error_msg=str("Process controller busy")
                     goal.publish_feedback(feedback)
-                    goal.set_aborted()                    
+                    goal.set_rejected()                    
                     rospy.loginfo("Attempt to execute new step while previous step running")
                     raise Exception("Attempt to execute new step while previous step running")
                 else:
@@ -586,9 +586,10 @@ class ProcessController(object):
         path_goal.trajectory = path
         self.execute_trajectory_action.send_goal(path_goal,active_cb=active_cb,done_cb=done_cb)
         if goal is None:
-            self.execute_trajectory_action.wait_for_result(30)
-            if self.execute_trajectory_action.get_result().error_code.val != 0:
-                raise Exception("Error executing trajectory")
+            self.execute_trajectory_action.wait_for_result(rospy.Duration(30))
+            if self.execute_trajectory_action.get_result().error_code.val != 1:
+                if not ft_stop:
+                    raise Exception("Error executing trajectory")
         
 
     def _plan(self, target_pose, waypoints_pose=[], speed_scalar = 1, config = None):

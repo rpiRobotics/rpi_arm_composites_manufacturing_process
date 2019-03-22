@@ -14,7 +14,8 @@ def main():
     time.sleep(0.5)
     
     rospy.loginfo("Begin panel pick and place script")
-    p.plan_pickup_prepare('leeward_tip_panel')
+    p.reset_position()
+    p.plan_pickup_prepare('leeward_mid_panel')
     p.move_pickup_prepare()
     p.plan_pickup_lower()
     p.move_pickup_lower()
@@ -25,10 +26,9 @@ def main():
     p.plan_pickup_raise()
     p.move_pickup_raise()
     
-    #p.transport_payload('panel_nest_leeward_mid_panel_target')
-    #p.place_lower()
-    #p.place_set()
-    #p.place_raise()
+    p.plan_transport_payload('panel_nest_leeward_mid_panel_target')
+    p.move_transport_payload()
+    
     rospy.loginfo("End panel pick and place script")
 
 if __name__ == '__main__':
