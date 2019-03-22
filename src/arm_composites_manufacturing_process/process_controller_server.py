@@ -39,44 +39,44 @@ class ProcessControllerServer(object):
         #TODO make goal cancelling of goal handle start here
         self.server.start()
         self.previous_goal=None
+        self.goal_handle=None
         
     def cancel(self,goal):
         self.previous_goal.set_canceled()
         
-    def execute_cb(self, goal):
-        goal.set_accepted()
+    def execute_cb(self, goal):        
         command = goal.get_goal().command
         target = goal.get_goal().target
-        self.controller.goal_handle=goal
+        self.goal_handle=goal
         self.previous_goal=goal
         if command == "plan_pickup_prepare":
-            self.controller.plan_pickup_prepare(target)
+            self.controller.plan_pickup_prepare(target, goal)
         elif command == "stop_motion":
-            self.controller.stop_motion()
+            self.controller.stop_motion(goal)
         elif command == "move_pickup_prepare":
-            self.controller.move_pickup_prepare()
+            self.controller.move_pickup_prepare(goal)
         elif command == "plan_to_reset_position":
-            self.controller.plan_to_reset_position()
+            self.controller.plan_to_reset_position(goal)
         elif command == "plan_pickup_lower":
-            self.controller.plan_pickup_lower()
+            self.controller.plan_pickup_lower(goal)
         elif command == "move_pickup_lower":
-            self.controller.move_pickup_lower()
+            self.controller.move_pickup_lower(goal)
         elif command == "plan_pickup_grab_first_step":
-            self.controller.plan_pickup_grab_first_step()
+            self.controller.plan_pickup_grab_first_step(goal)
         elif command == "move_pickup_grab_first_step":
-            self.controller.move_pickup_grab_first_step()
+            self.controller.move_pickup_grab_first_step(goal)
         elif command == "plan_pickup_grab_second_step":
-            self.controller.plan_pickup_grab_second_step()
+            self.controller.plan_pickup_grab_second_step(goal)
         elif command == "move_pickup_grab_second_step":
-            self.controller.move_pickup_grab_second_step()
+            self.controller.move_pickup_grab_second_step(goal)
         elif command == "plan_pickup_raise":
-            self.controller.plan_pickup_raise()
+            self.controller.plan_pickup_raise(goal)
         elif command == "move_pickup_raise":
-            self.controller.move_pickup_raise()
+            self.controller.move_pickup_raise(goal)
         elif command == "plan_transport_payload":
-            self.controller.plan_transport_payload(target)
+            self.controller.plan_transport_payload(target, goal)
         elif command == "move_transport_payload":
-            self.controller.move_transport_payload()
+            self.controller.move_transport_payload(goal)
         elif command == "plan_place_lower":
             self.controller.plan_place_lower()
         elif command == "move_place_lower":
@@ -94,9 +94,11 @@ class ProcessControllerServer(object):
         elif command == "move_place_raise":
             self.controller.move_place_raise()
         elif command == "reset_position":
-            self.controller.reset_position()
-        elif command == "transport_payload":
-            self.controller.transport_payload(target)
+            self.controller.reset_position(goal)
+        elif command == "plan_transport_payload":
+            self.controller.plan_transport_payload(target, goal)
+        elif command == "move_transport_payload":
+            self.controller.plan_transport_payload(target, goal)
         elif command == "place_panel":
             self.controller.place_panel(target)
         elif command == "rewind_motion":
@@ -106,14 +108,7 @@ class ProcessControllerServer(object):
             assert False, "Invalid command"
             
         #rospy.loginfo(goal.get_goal_status().status)
-        if("move" not in command and goal.get_goal_status().status!=4):
-            res = ProcessStepResult()
-            res.state=self.controller.state
-            res.target=self.controller.current_target if self.controller.current_target is not None else ""
-            res.payload=self.controller.current_payload if self.controller.current_payload is not None else ""
-        
-            goal.set_succeeded(res)
-        
+               
             
 def process_controller_server_main():
     rospy.init_node("process_controller_server")

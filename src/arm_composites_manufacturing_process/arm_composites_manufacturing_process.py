@@ -46,7 +46,7 @@ from industrial_payload_manager.srv import UpdatePayloadPose, UpdatePayloadPoseR
     GetPayloadArray, GetPayloadArrayRequest
 import time
 import sys
-from moveit_msgs.msg import ExecuteTrajectoryAction, ExecuteTrajectoryGoal, MoveItErrorCodes
+from moveit_msgs.msg import ExecuteTrajectoryAction, ExecuteTrajectoryGoal, MoveItErrorCodes, RobotTrajectory
 import os
 
 import threading
@@ -61,6 +61,7 @@ import subprocess
 import tesseract
 from tesseract_msgs.msg import TesseractState
 from sensor_msgs.msg import JointState
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 class ProcessController(object):
     def __init__(self, disable_ft=False):
@@ -94,7 +95,8 @@ class ProcessController(object):
 
         self.update_payload_pose_srv=rospy.ServiceProxy("update_payload_pose", UpdatePayloadPose)
         self.get_payload_array_srv=rospy.ServiceProxy("get_payload_array", GetPayloadArray)
-        self.goal_handle=None
+        self._goal_handle=None
+        self._goal_handle_lock=threading.RLock()
         self.subprocess_handle=None
         self.plan_dictionary={}
         self.process_starts={}
@@ -147,40 +149,6 @@ class ProcessController(object):
             return []
         return self._get_payload(payload).gripper_targets[0].pickup_ft_threshold
     
-    def _active_client(self):
-        #self.state="moving"
-        pass
-        #self.publish_process_state()
-
-    def _finished_client(self,state,result):
-        #if(state== actionlib.GoalStatus.SUCCEEDED):
-        rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
-        if(self.goal_handle is not None):
-            if(result.error_code.val!=1):
-                if(self.state=="pickup_grab_first_step"):
-                    self.publish_process_state()
-                    res = ProcessStepResult()
-                    res.state=self.state
-                    res.target=self.current_target if self.current_target is not None else ""
-                    res.payload=self.current_payload if self.current_payload is not None else ""
-                    self.goal_handle.set_succeeded(res)
-                else:
-                    
-                    feedback=ProcessStepFeedback()
-                    feedback.error_msg=str(result)
-                    self.goal_handle.publish_feedback(feedback)
-                    self.goal_handle.set_aborted()
-                
-                    rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
-            else:
-                self.publish_process_state()
-                res = ProcessStepResult()
-                res.state=self.state
-                res.target=self.current_target if self.current_target is not None else ""
-                res.payload=self.current_payload if self.current_payload is not None else ""
-            
-                self.goal_handle.set_succeeded(res)
-
     def get_state(self):
         return self.state
     
@@ -189,17 +157,15 @@ class ProcessController(object):
         
     def stop_motion(self):
         self.execute_trajectory_action.cancel_all_goals()
-        if(self.state in ["reset_position","transport_payload","place_panel"]):
+        if(self.state in ["place_panel"]):
             self.subprocess_handle.terminate()
     
-    def rewind_motion(self):
+    def rewind_motion(self, goal):
         if(self.process_index!=None and self.process_index!=0):
             rewind_target_pose=self.process_starts[self.process_states[self.process_index]]
-            path=self.controller_commander.plan(rewind_target_pose)
+            path=self._plan(rewind_target_pose, config="position_robot")
             try:
-                goal=ExecuteTrajectoryGoal()
-                goal.trajectory=path
-                self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
+                self._execute_path(path, goal)
                 self.process_index-=1
                 self.state=self.process_states[self.process_index]
                 
@@ -211,31 +177,32 @@ class ProcessController(object):
             
             
     
-    def reset_position(self):
-        #TODO: Implement reset movement in process controller
-        rospy.loginfo("Planning to reset position")
-        self.state="reset_position"
-        self.process_index=0
-        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
-        subprocess_handle=subprocess.Popen(['python', self.reset_code])
-        subprocess_handle.wait()
-        ret_code=subprocess_handle.returncode
-        self.publish_process_state()
+    def reset_position(self, goal):
         
-    def transport_payload(self, target_payload):
-        self.state="transport_payload"
-        self.process_index=6
-        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
-        self.current_target=target_payload
-        if(target_payload=="leeward_mid_panel"):
-            subprocess_handle=subprocess.Popen(['python', self.YC_transport_code, 'leeward_mid_panel'])
-        elif(target_payload=="leeward_tip_panel"):
-            subprocess_handle=subprocess.Popen(['python', self.YC_transport_code, 'leeward_tip_panel'])
-        subprocess_handle.wait()
-        ret_code=subprocess_handle.returncode
-    	self.publish_process_state()
-    	
-    def place_panel(self, target_payload):
+        self._begin_step(goal)
+        try:            
+            Q=[0.02196692, -0.10959773,  0.99369529, -0.00868731]
+            P=[1.8475985 , -0.04983688,  0.82486047]
+                    
+            rospy.loginfo("Planning to reset position")
+            self.state="reset_position"
+            self.process_index=0
+            
+            pose_target=rox.Transform(rox.q2R(Q), np.copy(P))
+            
+            path=self._plan(pose_target, config = "reposition_robot")
+            
+            rospy.loginfo("Executing reset position")
+            
+            self.controller_commander.set_controller_mode(self.controller_commander.MODE_HALT, self.speed_scalar,[], [])
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
+            
+            self._execute_path(path, goal)
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
+            	
+    def place_panel(self, target_payload, goal):
         self.state="place_panel"
         self.process_index=7
         self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
@@ -248,9 +215,9 @@ class ProcessController(object):
         ret_code=subprocess_handle.returncode
         self.publish_process_state()
     	
-    def plan_pickup_prepare(self, target_payload):
+    def plan_pickup_prepare(self, target_payload, goal):
         
-        #TODO: check state and payload
+        self._begin_step(goal)
         try:
             rospy.loginfo("Begin pickup_prepare for payload %s", target_payload)
             
@@ -267,44 +234,37 @@ class ProcessController(object):
             rospy.loginfo("Prepare pickup %s at pose %s", target_payload, object_target)
             print pose_target.p
             
-            path=self._trajopt_plan(pose_target)
+            path=self._plan(pose_target, config = "reposition_robot")
 
             self.current_target=target_payload
             self.state="plan_pickup_prepare"
             self.plan_dictionary['pickup_prepare']=path
             
             #rospy.loginfo("Finish pickup prepare for payload %s", target_payload)
-            self.publish_process_state()
+            self._step_complete(goal)
         except Exception as err:
-            feedback=ProcessStepFeedback()
-            feedback.error_msg=str(err)
-            self.goal_handle.publish_feedback(feedback)
-            self.goal_handle.set_aborted()
+            traceback.print_exc()
+            self._step_failed(err, goal)
 
-    def move_pickup_prepare(self):
-        #try:
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
-        result=None
-        
-        self.state="pickup_prepare"
-        self.process_index=1
-        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
-        goal=ExecuteTrajectoryGoal()
-        goal.trajectory=self.plan_dictionary['pickup_prepare']
-        self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-        if(self.goal_handle is None):
+    def move_pickup_prepare(self, goal):
+        self._begin_step(goal)
+        try:
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
+            result=None
             
-            self.execute_trajectory_action.wait_for_result()  #TODO integrate this as a synchronous wait option, check if goal handle then if not wait
-            #self.controller_commander.async_execute(self.plan_dictionary['pickup_prepare'],result)
-        #except Exception as err:
-        #feedback=ProcessStepFeedback()
-        #feedback.error_msg=str(err)
-        #self.goal_handle.publish_feedback(feedback)
-        #self.goal_handle.set_aborted()
+            self.state="pickup_prepare"
+            self.process_index=1
+            self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()            
+            plan=self.plan_dictionary['pickup_prepare']
+            self._execute_path(plan, goal)
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
 
-    def plan_pickup_lower(self):
+    def plan_pickup_lower(self, goal):
 
         #TODO: check change state and target
+        self._begin_step(goal)
         try:
             rospy.loginfo("Begin pickup_lower for payload %s", self.current_target)
             
@@ -314,19 +274,19 @@ class ProcessController(object):
             pose_target2.p[2] += 0.15    
             print pose_target2.p
 
-            path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+            #path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+            path=self._plan(pose_target2, config = "reposition_robot")
 
             self.state="plan_pickup_lower"
             self.plan_dictionary['pickup_lower']=path
             rospy.loginfo("Finish pickup_lower for payload %s", self.current_target)
-            self.publish_process_state()
+            self._step_complete(goal)
         except Exception as err:
-            feedback=ProcessStepFeedback()
-            feedback.error_msg=str(err)
-            self.goal_handle.publish_feedback(feedback)
-            self.goal_handle.set_aborted()
+            traceback.print_exc()
+            self._step_failed(err, goal)
 
-    def move_pickup_lower(self):
+    def move_pickup_lower(self, goal):
+        self._begin_step(goal)
         try:
             self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], self.get_payload_pickup_ft_threshold(self.current_target))
             result=None
@@ -336,22 +296,18 @@ class ProcessController(object):
             self.state="pickup_lower"
             self.process_index=2
             self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
-            goal=ExecuteTrajectoryGoal()
-            goal.trajectory=self.plan_dictionary['pickup_lower']
-            self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-            if(self.goal_handle is None):
+            path=self.plan_dictionary['pickup_lower']
+            self._execute_path(path, goal)
             
-                self.execute_trajectory_action.wait_for_result()
         #self.execute_trajectory_action.wait_for_result()
         #self.controller_commander.execute(self.plan_dictionary['pickup_lower'])
         except Exception as err:
-            feedback=ProcessStepFeedback()
-            feedback.error_msg=str(err)
-            self.goal_handle.publish_feedback(feedback)
-            self.goal_handle.set_aborted()
+            traceback.print_exc()
+            self._step_failed(err, goal)
 
-    def plan_pickup_grab_first_step(self):
+    def plan_pickup_grab_first_step(self, goal):
         #TODO: check change state and target
+        self._begin_step(goal)
         try:
             rospy.loginfo("Begin pickup_grab for payload %s", self.current_target)
                    
@@ -359,39 +315,37 @@ class ProcessController(object):
             pose_target2=copy.deepcopy(self.object_target)
             pose_target2.p[2] -= 0.15   
 
-            path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+            #path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+            path=self._plan(pose_target2, config = "panel_pickup")
             self.state="plan_pickup_grab_first_step"
             self.plan_dictionary['pickup_grab_first_step']=path
-            self.publish_process_state()
+            self._step_complete(goal)
         except Exception as err:
-            feedback=ProcessStepFeedback()
-            feedback.error_msg=str(err)
-            self.goal_handle.publish_feedback(feedback)
-            self.goal_handle.set_aborted()
+            traceback.print_exc()
+            self._step_failed(err, goal)
 
-    def move_pickup_grab_first_step(self):
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [],\
-                                                      self.get_payload_pickup_ft_threshold(self.current_target))
-        result=None
-        if(self.state!="plan_pickup_grab_first_step"):
-            self.plan_pickup_grab_first_step()
-        self.state="pickup_grab_first_step"
-        self.process_index=3
-        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
+    def move_pickup_grab_first_step(self, goal):
+        
+        self._begin_step(goal)
+        
         try:
-            goal=ExecuteTrajectoryGoal()
-            goal.trajectory=self.plan_dictionary['pickup_grab_first_step']
-            self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-            if(self.goal_handle is None):
-            
-                self.execute_trajectory_action.wait_for_result()
-            #self.execute_trajectory_action.wait_for_result()
-            #self.controller_commander.execute(self.plan_dictionary['pickup_grab_first_step'])
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [],\
+                                                          self.get_payload_pickup_ft_threshold(self.current_target))
+            result=None
+            if(self.state!="plan_pickup_grab_first_step"):
+                self.plan_pickup_grab_first_step()
+            self.state="pickup_grab_first_step"
+            self.process_index=3
+            self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
+                    
+            path=self.plan_dictionary['pickup_grab_first_step']
+            self._execute_path(path, goal, ft_stop=True)
         except Exception as err:
-            print err
+            traceback.print_exc()
+            self._step_failed(err, goal)
 
-
-    def plan_pickup_grab_second_step(self):
+    def plan_pickup_grab_second_step(self, goal):
+        self._begin_step(goal)
         try:
             self.rapid_node.set_digital_io("Vacuum_enable", 1)
             time.sleep(1)        
@@ -414,44 +368,39 @@ class ProcessController(object):
             
 
               
-            path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+            #path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+            
+            path=self._plan(pose_target2, config = "panel_pickup")
 
             self.state="plan_pickup_grab_second_step"
             self.plan_dictionary['pickup_grab_second_step']=path
             rospy.loginfo("Finish pickup_grab for payload %s", self.current_target)
-            self.publish_process_state()
+            self._step_complete(goal)
         except Exception as err:
-            feedback=ProcessStepFeedback()
-            feedback.error_msg=str(err)
-            self.goal_handle.publish_feedback(feedback)
-            self.goal_handle.set_aborted()
+            traceback.print_exc()
+            self._step_failed(err, goal)
 
-    def move_pickup_grab_second_step(self):
+    def move_pickup_grab_second_step(self, goal):
+        self._begin_step(goal)
         try:
-            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar,[], [])
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], [])
             result=None
             if(self.state!="plan_pickup_grab_second_step"):
                 self.plan_pickup_grab_second_step()
             self.state="pickup_grab_second_step"
             self.process_index=4
             self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
-            goal=ExecuteTrajectoryGoal()
-            goal.trajectory=self.plan_dictionary['pickup_grab_second_step']
-            self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-            if(self.goal_handle is None):
             
-                self.execute_trajectory_action.wait_for_result()
-            #self.execute_trajectory_action.wait_for_result()
-            #self.controller_commander.execute(self.plan_dictionary['pickup_grab_second_step'])
+            path=self.plan_dictionary['pickup_grab_second_step']
+            self._execute_path(path, goal)
         except Exception as err:
-            feedback=ProcessStepFeedback()
-            feedback.error_msg=str(err)
-            self.goal_handle.publish_feedback(feedback)
-            self.goal_handle.set_aborted()
+            traceback.print_exc()
+            self._step_failed(err, goal)
 
-    def plan_pickup_raise(self):
+    def plan_pickup_raise(self, goal):
         
         #TODO: check change state and target
+        self._begin_step(goal)
         try:
             rospy.loginfo("Begin pickup_raise for payload %s", self.current_payload)
             
@@ -461,22 +410,19 @@ class ProcessController(object):
             pose_target2.p[2] += 0.8
             pose_target2.p = np.array([-0.02285,-1.840,1.0])
             pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
-
-
             
-            path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
+            path=self._plan(pose_target2, config = "transport_panel")
             
             self.state="plan_pickup_raise"
             self.plan_dictionary['pickup_raise']=path
             rospy.loginfo("Finish pickup_raise for payload %s", self.current_target)
-            self.publish_process_state()
+            self._step_complete(goal)
         except Exception as err:
-            feedback=ProcessStepFeedback()
-            feedback.error_msg=str(err)
-            self.goal_handle.publish_feedback(feedback)
-            self.goal_handle.set_aborted()
+            traceback.print_exc()
+            self._step_failed(err, goal)
 
-    def move_pickup_raise(self):
+    def move_pickup_raise(self, goal):
+        self._begin_step(goal)
         try:
             self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
             result=None
@@ -485,171 +431,53 @@ class ProcessController(object):
             self.state="pickup_raise"
             self.process_index=5
             self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
-            goal=ExecuteTrajectoryGoal()
-            goal.trajectory=self.plan_dictionary['pickup_raise']
-            self.execute_trajectory_action.send_goal(goal,active_cb=self._active_client,done_cb=self._finished_client)
-            if(self.goal_handle is None):
             
-                self.execute_trajectory_action.wait_for_result()
-            #self.controller_commander.async_execute(self.plan_dictionary['pickup_raise'],result)
-            #self.execute_trajectory_action.wait_for_result()
+            path=self.plan_dictionary['pickup_raise']
+            self._execute_path(path, goal)
         except Exception as err:
-            feedback=ProcessStepFeedback()
-            feedback.error_msg=str(err)
-            self.goal_handle.publish_feedback(feedback)
-            self.goal_handle.set_aborted()
+            traceback.print_exc()
+            self._step_failed(err, goal)
         
-    def plan_transport_payload(self, target):
+    def plan_transport_payload(self, target, goal):
         
         #TODO: check state and payload
         
         rospy.loginfo("Begin transport_panel for payload %s to %s", self.current_payload, target)
+        self._begin_step(goal)
+        try:
         
-        #panel_target_pose = self.tf_listener.lookupTransform("world", target, rospy.Time(0))        
-        #panel_gripper_pose = self.tf_listener.lookupTransform(self.current_payload, "vacuum_gripper_tool", rospy.Time(0))        
-        #pose_target=panel_target_pose * panel_gripper_pose
-        pose_target=copy.deepcopy(self.pose_target)
-        pose_target.p = [2.197026484647054, 1.2179574262842452, 0.12376598588449844]
-        pose_target.R = np.array([[-0.99804142,  0.00642963,  0.06222524], [ 0.00583933,  0.99993626, -0.00966372], [-0.06228341, -0.00928144, -0.99801535]])
-        pose_target.p[2] += 0.35
+            #panel_target_pose = self.tf_listener.lookupTransform("world", target, rospy.Time(0))        
+            #panel_gripper_pose = self.tf_listener.lookupTransform(self.current_payload, "vacuum_gripper_tool", rospy.Time(0))        
+            #pose_target=panel_target_pose * panel_gripper_pose
+            pose_target=copy.deepcopy(self.pose_target)
+            pose_target.p = [2.197026484647054, 1.2179574262842452, 0.12376598588449844]
+            pose_target.R = np.array([[-0.99804142,  0.00642963,  0.06222524], [ 0.00583933,  0.99993626, -0.00966372], [-0.06228341, -0.00928144, -0.99801535]])
+            pose_target.p[2] += 0.35
+    
+    
+            #plan=self.controller_commander.plan(pose_target)
+            plan = self._plan(pose_target, config ="transport_panel")
+            
+            self.current_target=target
+            self.state="plan_transport_payload"
+            self.plan_dictionary['transport_payload']=plan
+            rospy.loginfo("Finish transport_panel for payload %s to %s", self.current_payload, target)
+            self._step_complete(goal)
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
 
-
-        plan=self.controller_commander.plan(pose_target)
-        
-        self.current_target=target
-        self.state="plan_transport_payload"
-        self.plan_dictionary['transport_payload']=plan
-        rospy.loginfo("Finish transport_panel for payload %s to %s", self.current_payload, target)
-        self.publish_process_state()
-
-    def move_transport_payload(self):
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
-        result=None
-        self.state="transport_payload"
-        self.controller_commander.async_execute(self.plan_dictionary['transport_payload'],result)
-        self.publish_process_state()
-
-    def plan_place_lower(self):
-        
-        #TODO: check state and payload
-        
-        rospy.loginfo("Begin place_lower for payload %s to %s", self.current_payload, self.current_target)
-        
-        panel_target_pose = self.tf_listener.lookupTransform("world", self.current_target, rospy.Time(0))        
-        panel_gripper_pose = self.tf_listener.lookupTransform(self.current_payload, "vacuum_gripper_tool", rospy.Time(0))        
-        pose_target=panel_target_pose * panel_gripper_pose
-                
-        pose_target.p[2] += 0.15  
-
-        path=self.controller_commander.plan(pose_target)
-                
-        self.state="plan_place_lower"
-        self.plan_dictionary['place_lower']=path
-        rospy.loginfo("Finish place_lower for payload %s to %s", self.current_payload, self.current_target)
-        self.publish_process_state()
-
-    def move_place_lower(self):
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
-        result=None
-        self.state="place_lower"
-        self.controller_commander.async_execute(self.plan_dictionary['place_lower'],result)
-        self.publish_process_state()
-
-    def plan_place_set_first_step(self):
-        
-        #TODO: check change state and target
-
-        rospy.loginfo("Begin place_set for payload %s target %s", self.current_payload, self.current_target)
-
-        panel_target_pose = self.tf_listener.lookupTransform("world", self.current_target, rospy.Time(0))
-        panel_gripper_pose = self.tf_listener.lookupTransform(self.current_payload, "vacuum_gripper_tool", rospy.Time(0))
-        pose_target=panel_target_pose * panel_gripper_pose
-        pose_target2=copy.deepcopy(pose_target)
-        pose_target2.p[2] -= 0.15
-
-
-
-        path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
-        self.state="plan_place_set_first_step"
-        self.plan_dictionary['place_set_first_step']=path
-        self.publish_process_state()
-
-    def move_place_set_first_step(self):
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [], \
-                                                      self.get_payload_pickup_ft_threshold(self.current_target))
-        result=None
-        self.state="place_set_first_step"
-        self.controller_commander.async_execute(self.plan_dictionary['place_set_first_step'],result)
-        self.rapid_node.set_digital_io("Vacuum_enable", 0)
-        time.sleep(1)
-        self.publish_process_state()
-
-    def plan_place_set_second_step(self):
-
-        #TODO: check vacuum feedback to make sure we have the panel
-
-        gripper_to_panel_tf=self.tf_listener.lookupTransform("vacuum_gripper_tool", self.current_payload, rospy.Time(0))
-        world_to_gripper_tf=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
-        world_to_panel_nest_tf=self.tf_listener.lookupTransform("world", "panel_nest", rospy.Time(0))
-        panel_to_nest_tf=world_to_panel_nest_tf.inv()*world_to_gripper_tf*gripper_to_panel_tf
-
-        self._update_payload_pose(self.current_payload, panel_to_nest_tf, "panel_nest", 0.5)
-
-        self.current_payload=None
-        self.current_target=None
-        '''
-        time.sleep(1)
-
-        pose_target2=copy.deepcopy(pose_target)
-        pose_target2.p[2] += 0.15
-
-
-        path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
-
-
-        self.plan_dictionary['place_set_second_step']=path
-        rospy.loginfo("Finish place_set for payload %s", self.current_target)
-        '''
-        self.state="plan_place_set_second_step"
-        self.publish_process_state()
-
-    def move_place_set_second_step(self):
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.4*self.speed_scalar, [], [])
-        result=None
-        self.state="place_set_second_step"
-        self.controller_commander.async_execute(self.plan_dictionary['place_set_second_step'],result)
-        self.publish_process_state()
-
-
-        
-    def plan_place_raise(self):
-        
-        #TODO: check change state and target
-        
-        rospy.loginfo("Begin place_raise for payload %s", self.current_payload)
-        
-        #Just use gripper position for now, think up a better way in future
-        object_target=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
-        pose_target2=copy.deepcopy(object_target)
-        pose_target2.p[2] += 0.5
-        
-
-        path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
-
-
-       
-        self.state="plan_place_raise"
-        self.plan_dictionary['place_raise']=path
-        rospy.loginfo("Finish place_raise for payload %s", self.current_target)
-        self.publish_process_state()
-
-    def move_place_raise(self):
-        self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
-        result=None
-        self.state="place_raise"
-        self.controller_commander.async_execute(self.plan_dictionary['place_raise'],result)
-        self.publish_process_state()
-
+    def move_transport_payload(self, goal):
+        self._begin_step(goal)
+        try:
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], []) 
+            self.state="transport_payload"
+            plan = self.plan_dictionary['transport_payload']
+            self._execute_path(plan, goal)
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
+    
     def _fill_process_state(self):
         s=ProcessState()
         s.state=self.state if self.state is not None else ""
@@ -693,16 +521,99 @@ class ProcessController(object):
         return payload_array_res.payload_array.payloads[0]
 
 
-    def _trajopt_plan(self, target_pose, waypoints_pose=[], speed_scalar=0.5):
+    def _begin_step(self, goal):
+        if goal is not None:
+            with self._goal_handle_lock:
+                if self._goal_handle is not None:
+                    feedback=ProcessStepFeedback()
+                    feedback.error_msg=str("Process controller busy")
+                    goal.publish_feedback(feedback)
+                    goal.set_aborted()                    
+                    rospy.loginfo("Attempt to execute new step while previous step running")
+                    raise Exception("Attempt to execute new step while previous step running")
+                else:
+                    goal.set_accepted()
+                    self._goal_handle=goal
+                    
+    
+    def _step_complete(self, goal):
+        
+        if goal is not None:
+            with self._goal_handle_lock:
+                self.publish_process_state()
+                res = ProcessStepResult()
+                res.state=self.state
+                res.target=self.current_target if self.current_target is not None else ""
+                res.payload=self.current_payload if self.current_payload is not None else ""    
+                goal.set_succeeded(res)
+                
+                if (self._goal_handle == goal):
+                    self._goal_handle=None
+    
+    def _step_failed(self, err, goal):
+        if goal is None:
+            raise err
+        else:
+            with self._goal_handle_lock:
+                feedback=ProcessStepFeedback()
+                feedback.error_msg=str(err)
+                goal.publish_feedback(feedback)
+                goal.set_aborted()
+                if (self._goal_handle == goal):
+                    self._goal_handle=None
+    
+    def _execute_path(self, path, goal, ft_stop=False): 
+        
+        def active_cb():
+            pass
+        
+        def done_cb(state, result):
+            rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
+            if(goal is not None):
+                if(result.error_code.val!=1):
+                    if ft_stop:
+                        self._step_complete(goal)                        
+                    else:                        
+                        feedback=ProcessStepFeedback()
+                        feedback.error_msg=str(result)
+                        goal.publish_feedback(feedback)
+                        goal.set_aborted()                    
+                        rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
+                else:
+                    self._step_complete(goal)            
+                            
+        path_goal=ExecuteTrajectoryGoal()
+        path_goal.trajectory = path
+        self.execute_trajectory_action.send_goal(path_goal,active_cb=active_cb,done_cb=done_cb)
+        if goal is None:
+            self.execute_trajectory_action.wait_for_result(30)
+            if self.execute_trajectory_action.get_result().error_code.val != 0:
+                raise Exception("Error executing trajectory")
+        
+
+    def _plan(self, target_pose, waypoints_pose=[], speed_scalar = 1, config = None):
+        return self._trajopt_plan(target_pose, waypoints_pose = waypoints_pose, speed_scalar = speed_scalar, json_config_name = config)
+
+    def _load_json_config(self, config_name, package_name = 'rpi_arm_composites_manufacturing_process'):
+        r = rospkg.RosPack()
+        package_path = r.get_path(package_name)
+        file_path=os.path.join(package_path, 'config', config_name + '.json')
+        with open(file_path, 'r') as f:
+            return f.read()
+
+    def _trajopt_plan(self, target_pose, waypoints_pose=[], speed_scalar=1, json_config_str=None, json_config_name=None):
         
         with self.lock:
         
+            if (json_config_str is None and json_config_name is not None):
+                json_config_str = self._load_json_config(json_config_name)
+        
             robot = self.controller_commander.rox_robot
             
-            vel_upper_lim = np.array(robot.joint_vel_limit) * speed_scalar
-            vel_lower_lim = -vel_upper_lim
-            joint_lower_limit = np.array(robot.joint_lower_limit)
-            joint_upper_limit = np.array(robot.joint_upper_limit)
+            #vel_upper_lim = np.array(robot.joint_vel_limit) * speed_scalar
+            #vel_lower_lim = -vel_upper_lim
+            #joint_lower_limit = np.array(robot.joint_lower_limit)
+            #joint_upper_limit = np.array(robot.joint_upper_limit)
             joint_names = robot.joint_names
             #joint_positions = self.controller_commander.get_current_joint_values()
             joint_state_msg=rospy.wait_for_message("joint_states", JointState)
@@ -720,113 +631,27 @@ class ProcessController(object):
             
             pci = tesseract.ProblemConstructionInfo(self.tesseract_env)
     
+            pci.fromJson(json_config_str)
+    
             pci.kin = self.tesseract_env.getManipulator(manip)
-            
-            pci.basic_info.n_steps = 50
-            pci.basic_info.manip = manip
-            pci.basic_info.dt_lower_lim = 1
-            pci.basic_info.dt_upper_lim = 10
-            pci.basic_info.start_fixed = True
-            pci.basic_info.use_time = True
-            
+                        
             pci.init_info.type = tesseract.InitInfo.STATIONARY
             #pci.init_info.dt=0.5
             
-            if True:
-                collision = tesseract.CollisionTermInfo()
-                collision.name = "collision"
-                collision.term_type = tesseract.TT_COST
-                collision.continuous = True
-                collision.first_step = 0
-                collision.last_step = pci.basic_info.n_steps - 1
-                collision.gap = 1
-                collision.info = tesseract.createSafetyMarginDataVector(pci.basic_info.n_steps, 0.025, 40)
-                pci.cost_infos.append(collision)
-            
-            if True:
-                jv = tesseract.JointVelTermInfo()
-                jv.targets = tesseract.DblVec([0.0]*6)
-                jv.coeffs = tesseract.DblVec([500.0]*6)
-                jv.term_type = tesseract.TT_COST
-                jv.first_step = 0
-                jv.last_step = pci.basic_info.n_steps - 1
-                jv.name = "joint_velocity_cost"
-                pci.cost_infos.append(jv)
+            #Final target_pose constraint
+            pose_constraint = tesseract.CartPoseTermInfo()
+            pose_constraint.term_type = tesseract.TT_CNT
+            pose_constraint.link = end_effector
+            pose_constraint.timestep = pci.basic_info.n_steps-1            
+            q=rox.R2q(target_pose.R)            
+            pose_constraint.wxyz = np.array(q)
+            pose_constraint.xyz = np.array(target_pose.p)
+            pose_constraint.pos_coefs = np.array([10,10,10], dtype=np.float64)
+            pose_constraint.rot_coefs = np.array([10,10,10], dtype=np.float64)
+            pose_constraint.name = "final_pose"
+            pci.cnt_infos.push_back(pose_constraint)
         
-            if True:
-                jv = tesseract.JointAccTermInfo()
-                jv.targets = tesseract.DblVec([0.0]*6)
-                jv.coeffs = tesseract.DblVec([2000.0]*6)
-                jv.term_type = tesseract.TT_COST
-                jv.first_step = 0
-                jv.last_step = pci.basic_info.n_steps - 1
-                jv.name = "joint_acc_cost"                
-                pci.cost_infos.append(jv)
-                
-            if True:
-                jv = tesseract.JointJerkTermInfo()
-                jv.targets = tesseract.DblVec([0.0]*6)
-                jv.coeffs = tesseract.DblVec([5.0]*6)
-                jv.term_type = tesseract.TT_COST
-                jv.first_step = 0
-                jv.last_step = pci.basic_info.n_steps - 1
-                jv.name = "joint_jerk_cost"                
-                pci.cost_infos.append(jv)
-        
-            if True:        
-                jv = tesseract.JointVelTermInfo()
-                jv.targets = tesseract.DblVec([0.0]*6)
-                jv.coeffs = tesseract.DblVec([50000.0]*6)
-                jv.lower_tols = tesseract.DblVec(vel_lower_lim)
-                jv.upper_tols = tesseract.DblVec(vel_upper_lim)
-                jv.term_type = tesseract.TT_CNT | tesseract.TT_USE_TIME
-                jv.first_step = 0
-                jv.last_step = pci.basic_info.n_steps - 1
-                jv.name = "joint_velocity_cnt"
-                pci.cnt_infos.append(jv)
-                
-            if True:
-                pose_constraint = tesseract.CartPoseTermInfo()
-                pose_constraint.term_type = tesseract.TT_CNT
-                pose_constraint.link = end_effector
-                pose_constraint.timestep = pci.basic_info.n_steps-1
-                
-                q=rox.R2q(target_pose.R)
-                
-                pose_constraint.wxyz = np.array(q)
-                pose_constraint.xyz = target_pose.p
-                pose_constraint.pos_coefs = np.array([10,10,10], dtype=np.float64)
-                pose_constraint.rot_coefs = np.array([10,10,10], dtype=np.float64)
-                pose_constraint.name = "final_pose"
-                pci.cnt_infos.push_back(pose_constraint)
-        
-            if True:        
-                jv = tesseract.JointVelTermInfo()
-                jv.targets = tesseract.DblVec([0.0]*6)
-                jv.coeffs = tesseract.DblVec([10000.0]*6)                
-                jv.term_type = tesseract.TT_COST
-                jv.first_step = pci.basic_info.n_steps - 1
-                jv.last_step = pci.basic_info.n_steps - 1
-                jv.name = "joint_velocity_final_cost"
-                pci.cost_infos.append(jv)
-        
-            if True:        
-                jv = tesseract.JointVelTermInfo()
-                jv.targets = tesseract.DblVec([0.0]*6)
-                jv.coeffs = tesseract.DblVec([10000.0]*6)                
-                jv.term_type = tesseract.TT_COST
-                jv.first_step = 0
-                jv.last_step = 1
-                jv.name = "joint_velocity_initial_cost"
-                pci.cost_infos.append(jv)
-        
-            if True:
-                time_cost = tesseract.TotalTimeTermInfo()
-                time_cost.name = "time_cost"
-                time_cost.coeff = 5                
-                time_cost.term_type = tesseract.TT_COST
-                pci.cost_infos.append(time_cost)
-                
+                            
             prob = tesseract.ConstructProblem(pci)
             
             config = tesseract.TrajOptPlannerConfig(prob)
@@ -836,10 +661,19 @@ class ProcessController(object):
             planning_response = planner.solve(config)
             
             self.tesseract_plotter.plotTrajectory(self.tesseract_env.getJointNames(), planning_response.trajectory[:,0:6])
-            print np.rad2deg(planning_response.trajectory[:,1])
-            print np.rad2deg(planning_response.trajectory[:,2])
-            print np.cumsum(1.0/planning_response.trajectory[:,6])
             
-            import matplotlib.pyplot as plt
-            plt.plot(np.cumsum(1.0/planning_response.trajectory[:,6]), np.rad2deg(planning_response.trajectory[:,1]), 'x' )
-            plt.show()
+            jt = JointTrajectory()
+            jt.header.stamp = rospy.Time.now()
+            jt.joint_names = joint_names
+            
+            trajectory_time = np.cumsum(1.0/planning_response.trajectory[:,6])
+            trajectory_time = trajectory_time - trajectory_time[0]
+            
+            for i in xrange(planning_response.trajectory.shape[0]):
+                jt_p=JointTrajectoryPoint()
+                jt_p.time_from_start=rospy.Duration(trajectory_time[i])
+                jt_p.positions = planning_response.trajectory[i,0:6]
+                jt.points.append(jt_p)
+            
+            return RobotTrajectory(jt, None)
+            
