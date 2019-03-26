@@ -1,10 +1,10 @@
 {
   "basic_info" :
   {
-    "n_steps" : 50,
+    "n_steps" : 150,
     "manip" : "move_group",
     "dt_lower_lim" : 1,
-    "dt_upper_lim" : 10,
+    "dt_upper_lim" : 100,
     "use_time" : true,
     "start_fixed" : true
   },
@@ -20,26 +20,10 @@
       {
         "coeffs" : [40],
         "continuous": true,
-        "gap": 1,
+        "gap": 0.01,
         "dist_pen" : [0.025]
       }
-    },
-    {
-      "type" : "joint_vel",
-      "params" :
-      {
-        "coeffs" : [500],
-        "targets" : [0]
-      }
-    },
-    {
-      "type" : "joint_acc",
-      "params" :
-      {
-        "targets" : [0],
-        "coeffs" : [2000]
-      }      
-    },
+    },    
     {
       "type" : "joint_jerk",
       "params" :
@@ -47,25 +31,16 @@
         "targets" : [0],
         "coeffs" : [5]
       }
-    },
+    },    
     {
       "type" : "joint_vel",
+      "name" : "joint_vel_1",
       "params" :
       {
         "targets" : [0],
-        "coeffs" : [10000],
-        "first_step" : 49,
-        "last_step" : 49
-      }
-    },
-    {
-      "type" : "joint_vel",
-      "params" :
-      {
-        "targets" : [0],
-        "coeffs" : [10000],
+        "coeffs" : [1000],
         "first_step" : 0,
-        "last_step" : 1
+        "last_step" : 149
       }
     },
     {
@@ -73,6 +48,30 @@
       "params" :
       {
         "coeff" : 5
+      }
+    },
+    {
+      "type" : "joint_vel",
+      "name" : "joint_vel_start",
+      "params" :
+      {
+        "targets" : [0,0,0,0,0,0],
+        "coeffs" : [100000],
+        "first_step" : 0,
+        "last_step" : 5
+        
+      }
+    },
+    {
+      "type" : "joint_vel",
+      "name" : "joint_vel_end",
+      "params" :
+      {
+        "targets" : [0,0,0,0,0,0],
+        "coeffs" : [100000],
+        "first_step" : 144,
+        "last_step" : 149
+        
       }
     }
   ],
@@ -83,12 +82,20 @@
       "use_time" : true,
       "params" :
       {
-        "targets" : [0, 0, 0, 0, 0, 0],
-        "coeffs" : [50000, 50000, 50000, 50000, 50000 ,50000],
-        "lower_tols" : [-1.7453, -1.5707, -1.5707, -2.9671, -2.4435, -3.3161],
-        "upper_tols" : [1.7453, 1.5707, 1.5707, 2.9671, 2.4435, 3.3161]        
+        "targets" : [0, 0, 0, 0, 0, 0],        
+        "lower_tols" : [-0.5, -0.5, -0.5, -0.8, -1, -1],
+        "upper_tols" : [0.5, 0.5, 0.5, 0.8, 1, 1]        
       }
-    }
+    },
+    {
+      "type" : "joint_acc",
+      "params" :
+      {
+        "targets" : [0, 0, 0, 0, 0, 0],        
+        "lower_tols" : [-0.01, -0.1, -0.1, -0.1, -0.1, -0.1],
+        "upper_tols" : [0.01, 0.1, 0.1, 0.1, 0.1, 0.1]        
+      }
+    }    
   ]
 }
 

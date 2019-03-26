@@ -38,17 +38,14 @@ class ProcessControllerServer(object):
         self.server=actionlib.ActionServer("process_step", ProcessStepAction, goal_cb=self.execute_cb,cancel_cb=self.cancel, auto_start=False)
         #TODO make goal cancelling of goal handle start here
         self.server.start()
-        self.previous_goal=None
-        self.goal_handle=None
-        
+                
     def cancel(self,goal):
-        self.previous_goal.set_canceled()
+        self.controller.cancel_step(goal)
         
     def execute_cb(self, goal):        
         command = goal.get_goal().command
         target = goal.get_goal().target
-        self.goal_handle=goal
-        self.previous_goal=goal
+        
         if command == "plan_pickup_prepare":
             self.controller.plan_pickup_prepare(target, goal)
         elif command == "stop_motion":

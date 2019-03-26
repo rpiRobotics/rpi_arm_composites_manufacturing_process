@@ -46,11 +46,9 @@ from industrial_payload_manager.srv import UpdatePayloadPose, UpdatePayloadPoseR
     GetPayloadArray, GetPayloadArrayRequest
 import time
 import sys
-from moveit_msgs.msg import ExecuteTrajectoryAction, ExecuteTrajectoryGoal, MoveItErrorCodes, RobotTrajectory
 import os
 
 import threading
-from moveit_commander import PlanningSceneInterface
 import traceback
 import resource_retriever
 import urlparse
@@ -74,8 +72,7 @@ class ProcessController(object):
         self.tesseract_diff_sub=rospy.Subscriber("tesseract_diff", TesseractState, self._tesseract_diff_cb)
         self.tesseract_plotter = tesseract.ROSBasicPlotting(self.tesseract_env)
         self.tesseract_plotter.plotScene()        
-        self.overhead_vision_client=actionlib.SimpleActionClient("recognize_objects", ObjectRecognitionAction)
-        self.execute_trajectory_action=actionlib.SimpleActionClient("execute_trajectory",ExecuteTrajectoryAction)
+        self.overhead_vision_client=actionlib.SimpleActionClient("recognize_objects", ObjectRecognitionAction)        
         self.rapid_node = rapid_node_pkg.RAPIDCommander()
         self.controller_commander=controller_commander_pkg.ControllerCommander()
         self.state='init'
@@ -84,8 +81,7 @@ class ProcessController(object):
         self.available_payloads={'leeward_mid_panel': 'leeward_mid_panel','leeward_tip_panel':'leeward_tip_panel'}
         self.desired_controller_mode=self.controller_commander.MODE_AUTO_TRAJECTORY
         self.speed_scalar=1.0
-        self.disable_ft=disable_ft
-        self.reset_code=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'Reset_Start_pos_wason2.py')
+        self.disable_ft=disable_ft        
         self.YC_place_code=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'Vision_MoveIt_new_Cam_WL_Jcam2_DJ_01172019_Panel1.py')
         self.YC_place_code2=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'Vision_MoveIt_new_Cam_WL_Jcam2_DJ_01172019_Panel2.py')
         self.YC_transport_code=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'test_moveit_commander_custom_trajectory_YC_TransportPath_Panels.py')
@@ -155,11 +151,14 @@ class ProcessController(object):
     def get_current_pose(self):
         return self.controller_commander.get_current_pose_msg()
         
+    def cancel_step(self, goal=None):        
+        with self._goal_handle_lock:
+            self.stop_motion()
+               
     def stop_motion(self):
-        self.execute_trajectory_action.cancel_all_goals()
-        if(self.state in ["place_panel"]):
-            self.subprocess_handle.terminate()
-    
+        with self._goal_handle_lock:
+            self.controller_commander.stop_trajectory()
+            
     def rewind_motion(self, goal):
         if(self.process_index!=None and self.process_index!=0):
             rewind_target_pose=self.process_starts[self.process_states[self.process_index]]
@@ -196,7 +195,7 @@ class ProcessController(object):
             
             self.controller_commander.set_controller_mode(self.controller_commander.MODE_HALT, self.speed_scalar,[], [])
             self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
-            
+                                    
             self._execute_path(path, goal)
         except Exception as err:
             traceback.print_exc()
@@ -407,7 +406,7 @@ class ProcessController(object):
             #Just use gripper position for now, think up a better way in future
             object_target=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
             pose_target2=copy.deepcopy(object_target)
-            pose_target2.p[2] += 0.8
+            pose_target2.p[2] += 0.3
             pose_target2.p = np.array([-0.02285,-1.840,1.0])
             pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
             
@@ -450,9 +449,9 @@ class ProcessController(object):
             #panel_gripper_pose = self.tf_listener.lookupTransform(self.current_payload, "vacuum_gripper_tool", rospy.Time(0))        
             #pose_target=panel_target_pose * panel_gripper_pose
             pose_target=copy.deepcopy(self.pose_target)
-            pose_target.p = [2.197026484647054, 1.2179574262842452, 0.12376598588449844]
+            pose_target.p = [1.97026484647054, 1.1179574262842452, 0.12376598588449844]
             pose_target.R = np.array([[-0.99804142,  0.00642963,  0.06222524], [ 0.00583933,  0.99993626, -0.00966372], [-0.06228341, -0.00928144, -0.99801535]])
-            pose_target.p[2] += 0.35
+            pose_target.p[2] += 0.25
     
     
             #plan=self.controller_commander.plan(pose_target)
@@ -564,32 +563,27 @@ class ProcessController(object):
     
     def _execute_path(self, path, goal, ft_stop=False): 
         
-        def active_cb():
-            pass
-        
-        def done_cb(state, result):
-            rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
-            if(goal is not None):
-                if(result.error_code.val!=1):
-                    if ft_stop:
-                        self._step_complete(goal)                        
-                    else:                        
-                        feedback=ProcessStepFeedback()
-                        feedback.error_msg=str(result)
-                        goal.publish_feedback(feedback)
-                        goal.set_aborted()                    
-                        rospy.loginfo("MoveItErrorCode generated: %s",str(result.error_code.val))
-                else:
-                    self._step_complete(goal)            
-                            
-        path_goal=ExecuteTrajectoryGoal()
-        path_goal.trajectory = path
-        self.execute_trajectory_action.send_goal(path_goal,active_cb=active_cb,done_cb=done_cb)
         if goal is None:
-            self.execute_trajectory_action.wait_for_result(rospy.Duration(30))
-            if self.execute_trajectory_action.get_result().error_code.val != 1:
-                if not ft_stop:
-                    raise Exception("Error executing trajectory")
+            self.controller_commander.execute_trajectory(path, ft_stop=ft_stop)
+            return
+            
+                
+        def done_cb(err):
+            rospy.loginfo("safe_kinematic_controller generated: %s",str(err))
+            if(goal is not None):                
+                if err is None:
+                    self._step_complete(goal)
+                else:
+                    with self._goal_handle_lock:
+                        if self._goal_handle == goal:
+                            self._goal_handle = None
+                    feedback=ProcessStepFeedback()
+                    feedback.error_msg=str(err)
+                    goal.publish_feedback(feedback)
+                    goal.set_aborted()                    
+                    rospy.loginfo("safe_kinematic_controller generated: %s",str(err))
+                           
+        self.controller_commander.async_execute_trajectory(path, done_cb=done_cb, ft_stop=ft_stop)
         
 
     def _plan(self, target_pose, waypoints_pose=[], speed_scalar = 1, config = None):
@@ -615,10 +609,9 @@ class ProcessController(object):
             #vel_lower_lim = -vel_upper_lim
             #joint_lower_limit = np.array(robot.joint_lower_limit)
             #joint_upper_limit = np.array(robot.joint_upper_limit)
-            joint_names = robot.joint_names
-            #joint_positions = self.controller_commander.get_current_joint_values()
-            joint_state_msg=rospy.wait_for_message("joint_states", JointState)
-            joint_positions=np.array(joint_state_msg.position, dtype=np.float64)
+            joint_names = robot.joint_names            
+            
+            joint_positions = self.controller_commander.get_current_joint_values()
             
             self.tesseract_env.setState(joint_names, joint_positions)
             
@@ -647,8 +640,8 @@ class ProcessController(object):
             q=rox.R2q(target_pose.R)            
             pose_constraint.wxyz = np.array(q)
             pose_constraint.xyz = np.array(target_pose.p)
-            pose_constraint.pos_coefs = np.array([10,10,10], dtype=np.float64)
-            pose_constraint.rot_coefs = np.array([10,10,10], dtype=np.float64)
+            pose_constraint.pos_coefs = np.array([1000000,1000000,1000000], dtype=np.float64)
+            pose_constraint.rot_coefs = np.array([10000,10000,10000], dtype=np.float64)
             pose_constraint.name = "final_pose"
             pci.cnt_infos.push_back(pose_constraint)
         
@@ -657,9 +650,12 @@ class ProcessController(object):
             
             config = tesseract.TrajOptPlannerConfig(prob)
             
-            config.params.max_iter = 1000
+            config.params.max_iter = 100000
             
             planning_response = planner.solve(config)
+            
+            if (planning_response.status_code != 0):
+                raise Exception("TrajOpt trajectory planning failed with code: %d" % planning_response.status_code )
             
             self.tesseract_plotter.plotTrajectory(self.tesseract_env.getJointNames(), planning_response.trajectory[:,0:6])
             
@@ -676,5 +672,5 @@ class ProcessController(object):
                 jt_p.positions = planning_response.trajectory[i,0:6]
                 jt.points.append(jt_p)
             
-            return RobotTrajectory(jt, None)
+            return jt
             

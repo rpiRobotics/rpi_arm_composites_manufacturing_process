@@ -5,6 +5,7 @@
 import rospy
 from rpi_arm_composites_manufacturing_process.msg import ProcessStepAction, ProcessStepGoal
 import actionlib
+import time
 
 def main():
     rospy.init_node("pick_and_place_panel_client", anonymous=True)
@@ -23,6 +24,7 @@ def main():
     rospy.loginfo("Begin panel pick and place action client script")
     _execute_step("plan_pickup_prepare", "leeward_mid_panel")
     _execute_step("move_pickup_prepare", "leeward_mid_panel")
+    time.sleep(2)
     _execute_step("plan_pickup_lower")
     _execute_step("move_pickup_lower")
     _execute_step("plan_pickup_grab_first_step")
