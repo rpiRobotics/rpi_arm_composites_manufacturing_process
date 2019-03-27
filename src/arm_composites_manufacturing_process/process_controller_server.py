@@ -92,12 +92,9 @@ class ProcessControllerServer(object):
             self.controller.move_place_raise()
         elif command == "reset_position":
             self.controller.reset_position(goal)
-        elif command == "plan_transport_payload":
-            self.controller.plan_transport_payload(target, goal)
-        elif command == "move_transport_payload":
-            self.controller.plan_transport_payload(target, goal)
+        
         elif command == "place_panel":
-            self.controller.place_panel(target)
+            self.controller.place_panel(target,goal)
         elif command == "rewind_motion":
             self.controller.rewind_motion()
         else:

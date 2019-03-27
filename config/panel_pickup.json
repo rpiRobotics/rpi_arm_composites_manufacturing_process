@@ -4,7 +4,7 @@
     "n_steps" : 50,
     "manip" : "move_group",
     "dt_lower_lim" : 5,
-    "dt_upper_lim" : 25,
+    "dt_upper_lim" : 50,
     "use_time" : true,
     "start_fixed" : true
   },
@@ -46,7 +46,7 @@
       "params" :
       {
         "targets" : [0,0,0,0,0,0],
-        "coeffs" : [10],
+        "coeffs" : [10000],
         "first_step" : 0,
         "last_step" : 2
         
@@ -58,12 +58,21 @@
       "params" :
       {
         "targets" : [0,0,0,0,0,0],
-        "coeffs" : [10],
+        "coeffs" : [10000],
         "first_step" : 48,
         "last_step" : 49
         
       }
-    }
+    },
+    {
+      "type" : "joint_acc",
+      "name" : "joint_acc_cost",
+      "params" :
+      {
+        "targets" : [0, 0, 0, 0, 0, 0],        
+        "coeffs" : [100000]        
+      }
+    } 
   ],
   "constraints" :
   [
