@@ -568,6 +568,7 @@ class ProcessController(object):
                     with self._goal_handle_lock:
                         if self._goal_handle == goal:
                             self._goal_handle = None
+                    res = ProcessStepResult()
                     res.state=self.state
                     res.target=self.current_target if self.current_target is not None else ""
                     res.payload=self.current_payload if self.current_payload is not None else ""
@@ -579,6 +580,7 @@ class ProcessController(object):
             if goal.get_goal_status().status != actionlib.GoalStatus.ACTIVE:
                 if self._goal_handle == goal:
                     self._goal_handle = None
+                res = ProcessStepResult()
                 res.state=self.state
                 res.target=self.current_target if self.current_target is not None else ""
                 res.payload=self.current_payload if self.current_payload is not None else ""
