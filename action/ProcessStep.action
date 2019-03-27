@@ -10,7 +10,8 @@ string target
 string state
 string payload
 string target
+string error_msg
 ---
 #feedback
-string error_msg
+
 
