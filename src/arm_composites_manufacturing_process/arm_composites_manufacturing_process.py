@@ -38,7 +38,7 @@ from general_robotics_toolbox import ros_tf as tf
 
 import rpi_abb_irc5.ros.rapid_commander as rapid_node_pkg
 import safe_kinematic_controller.ros.commander as controller_commander_pkg
-from rpi_arm_composites_manufacturing_process.msg import ProcessState, ProcessStepFeedback, ProcessStepResult
+from rpi_arm_composites_manufacturing_process.msg import ProcessState, ProcessStepResult
 from object_recognition_msgs.msg import ObjectRecognitionAction, ObjectRecognitionGoal
 
 from industrial_payload_manager.payload_transform_listener import PayloadTransformListener
@@ -512,10 +512,12 @@ class ProcessController(object):
         if goal is not None:
             with self._goal_handle_lock:
                 if self._goal_handle is not None:
-                    feedback=ProcessStepFeedback()
-                    feedback.error_msg=str("Process controller busy")
-                    goal.publish_feedback(feedback)
-                    goal.set_rejected()                    
+                    res = ProcessStepResult()
+                    res.state=self.state
+                    res.target=self.current_target if self.current_target is not None else ""
+                    res.payload=self.current_payload if self.current_payload is not None else ""
+                    res.error_msg="Attempt to execute new step while previous step running"
+                    goal.set_rejected(result=res)                
                     rospy.loginfo("Attempt to execute new step while previous step running")
                     raise Exception("Attempt to execute new step while previous step running")
                 else:
