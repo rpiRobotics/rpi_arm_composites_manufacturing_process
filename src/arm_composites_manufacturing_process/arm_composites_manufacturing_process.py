@@ -277,7 +277,7 @@ class ProcessController(object):
 
             object_target, _=self._tf_get_object_gripper_target_pose(self.current_target)
             pose_target2=copy.deepcopy(object_target)
-            pose_target2.p[2] += 0.15    
+            pose_target2.p[2] += 0.3    
             print pose_target2.p
 
             #path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
