@@ -262,7 +262,7 @@ class ProcessController(object):
             print pose_target2.p
 
             #path=self.controller_commander.compute_cartesian_path(pose_target2, avoid_collisions=False)
-            path=self._plan(pose_target2, config = "reposition_robot")
+            path=self._plan(pose_target2, config = "reposition_robot_short")
 
             self.state="plan_pickup_lower"
             self.plan_dictionary['pickup_lower']=path
@@ -398,7 +398,7 @@ class ProcessController(object):
             pose_target2.p = np.array([-0.02285,-1.840,1.0])
             pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
             
-            path=self._plan(pose_target2, config = "transport_panel")
+            path=self._plan(pose_target2, config = "transport_panel_short")
             
             self.state="plan_pickup_raise"
             self.plan_dictionary['pickup_raise']=path

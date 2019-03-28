@@ -4,7 +4,7 @@
     "n_steps" : 15,
     "manip" : "move_group",
     "dt_lower_lim" : 1,
-    "dt_upper_lim" : 25,
+    "dt_upper_lim" : 100,
     "use_time" : true,
     "start_fixed" : true
   },
@@ -13,7 +13,17 @@
     "type": "stationary"
   },
   "costs" :
-  [   
+  [
+    {
+      "type" : "collision",
+      "params" :
+      {
+        "coeffs" : [40],
+        "continuous": true,
+        "gap": 0.01,
+        "dist_pen" : [0.025]
+      }
+    },    
     {
       "type" : "joint_jerk",
       "params" :
@@ -30,7 +40,7 @@
         "targets" : [0],
         "coeffs" : [1000],
         "first_step" : 0,
-        "last_step" : 15
+        "last_step" : 14
       }
     },
     {
@@ -46,9 +56,9 @@
       "params" :
       {
         "targets" : [0,0,0,0,0,0],
-        "coeffs" : [10000],
+        "coeffs" : [100000],
         "first_step" : 0,
-        "last_step" : 2
+        "last_step" : 1
         
       }
     },
@@ -58,12 +68,21 @@
       "params" :
       {
         "targets" : [0,0,0,0,0,0],
-        "coeffs" : [10000],
-        "first_step" : 14,
-        "last_step" : 15
+        "coeffs" : [100000],
+        "first_step" : 13,
+        "last_step" : 14
         
       }
-    }
+    },
+    {
+      "type" : "joint_acc",
+      "name" : "joint_acc_cost",
+      "params" :
+      {
+        "targets" : [0, 0, 0, 0, 0, 0],        
+        "coeffs" : [100000]        
+      }
+    }    
   ],
   "constraints" :
   [
@@ -73,8 +92,8 @@
       "params" :
       {
         "targets" : [0, 0, 0, 0, 0, 0],        
-        "lower_tols" : [-0.05, -0.05, -0.05, -0.4, -1, -1],
-        "upper_tols" : [0.05, 0.05, 0.05, 0.4, 1, 1]        
+        "lower_tols" : [-0.1, -0.1, -0.1, -0.4, -1, -1],
+        "upper_tols" : [0.1, 0.1, 0.1, 0.4, 1, 1]        
       }
     },
     {
