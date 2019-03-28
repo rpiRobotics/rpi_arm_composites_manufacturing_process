@@ -63,7 +63,16 @@
         "last_step" : 15
         
       }
-    }
+    },
+    {
+      "type" : "joint_acc",
+      "name" : "joint_acc_cost",
+      "params" :
+      {
+        "targets" : [0, 0, 0, 0, 0, 0],        
+        "coeffs" : [100000]        
+      }
+    } 
   ],
   "constraints" :
   [

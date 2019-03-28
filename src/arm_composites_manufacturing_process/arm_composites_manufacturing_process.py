@@ -57,6 +57,9 @@ from tf.msg import tfMessage
 from visualization_msgs.msg import Marker, MarkerArray
 import subprocess
 from .planner import Planner
+from .generate_placement_action import _placement
+from ibvs_object_placement.msg import PlacementStepAction
+
 
 class ProcessController(object):
     def __init__(self, disable_ft=False):
@@ -80,7 +83,8 @@ class ProcessController(object):
         self.tf_listener=PayloadTransformListener()
         self._process_state_pub = rospy.Publisher("process_state", ProcessState, queue_size=100, latch=True)
         self.publish_process_state()
-
+        self.placement_client=actionlib.SimpleActionClient('placement_step', PlacementStepAction)
+        self.placement_client.wait_for_server()
         self.update_payload_pose_srv=rospy.ServiceProxy("update_payload_pose", UpdatePayloadPose)
         self.get_payload_array_srv=rospy.ServiceProxy("get_payload_array", GetPayloadArray)
         self._goal_handle=None
@@ -190,17 +194,32 @@ class ProcessController(object):
             self._step_failed(err, goal)
             	
     def place_panel(self, target_payload, goal = None):
-        self.state="place_panel"
-        self.process_index=7
-        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
-        self.current_target=target_payload
-        if(target_payload=="leeward_mid_panel"):
-            subprocess_handle=subprocess.Popen(['python', self.YC_place_code])
-        elif(target_payload=="leeward_tip_panel"):
-            subprocess_handle=subprocess.Popen(['python', self.YC_place_code2])
-        subprocess_handle.wait()
-        ret_code=subprocess_handle.returncode
-        self.publish_process_state()
+        
+        if goal is None:
+            self.controller_commander.execute_trajectory(path, ft_stop=ft_stop)
+            return
+            
+                
+        def done_cb(err):
+            rospy.loginfo("ibvs placement generated: %s",str(err))
+            if(goal is not None):                
+                if err is None:
+                    self._step_complete(goal)
+                else:
+                    with self._goal_handle_lock:
+                        if self._goal_handle == goal:
+                            self._goal_handle = None
+                    res = ProcessStepResult()
+                    res.state=self.state
+                    res.target=self.current_target if self.current_target is not None else ""
+                    res.payload=self.current_payload if self.current_payload is not None else ""
+                    res.error_msg=str(err)    
+                    goal.set_aborted(result=res)                    
+                    rospy.loginfo("safe_kinematic_controller generated: %s",str(err))
+        
+        with self._goal_handle_lock:
+            placement_goal=_placement(target_payload)    
+            client_handle=self.placement_client.send_goal(placement_goal,done_cb=done_cb)
     	
     def plan_pickup_prepare(self, target_payload, goal = None):
         
@@ -464,7 +483,60 @@ class ProcessController(object):
         except Exception as err:
             traceback.print_exc()
             self._step_failed(err, goal)
-    
+            
+    def plan_gripper_release(self, goal =None):
+        self._begin_step(goal)
+        try:
+            self.rapid_node.set_digital_io("Vacuum_enable", 1)
+            #time.sleep(1)
+            
+            #TODO: check vacuum feedback to make sure we have the panel
+            pose_target2=self.controller_commander.compute_fk()
+            pose_target2.p[2] += 0.25
+            
+            self.current_payload=self.current_target
+            
+            gripper_to_panel_tf=self.tf_listener.lookupTransform("vacuum_gripper_tool", self.current_payload, rospy.Time(0))
+            world_to_gripper_tf=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
+            world_to_panel_nest_tf=self.tf_listener.lookupTransform("world", "panel_nest", rospy.Time(0))
+            panel_to_nest_tf=world_to_panel_nest_tf.inv()*world_to_gripper_tf*gripper_to_panel_tf
+            
+            self._update_payload_pose(self.current_payload, panel_to_nest_tf, "panel_nest", 0.5)
+            
+            self.current_payload=None
+            self.current_target=None
+            
+            
+            time.sleep(1)
+            
+            path=self._plan(pose_target2, config = "panel_pickup")
+
+            self.state="plan_gripper_release"
+            self.plan_dictionary['gripper_release']=path
+            rospy.loginfo("Finished gripper release")
+            self._step_complete(goal)
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
+        
+        
+    def move_gripper_release(self, goal=None):
+        self._begin_step(goal)
+        try:
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], [])
+            result=None
+            if(self.state!="plan_gripper_release"):
+                self.plan_gripper_release()
+            self.state="gripper_release"
+            #self.process_index=7
+            #self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
+            
+            path=self.plan_dictionary['gripper_release']
+            self._execute_path(path, goal)
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
+        
     def _fill_process_state(self):
         s=ProcessState()
         s.state=self.state if self.state is not None else ""
