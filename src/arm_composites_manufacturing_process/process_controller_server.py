@@ -92,7 +92,10 @@ class ProcessControllerServer(object):
             self.controller.move_place_raise()
         elif command == "reset_position":
             self.controller.reset_position(goal)
-        
+        elif command == "plan_gripper_release":
+            self.controller.plan_gripper_release(goal)
+        elif command == "move_gripper_release":
+            self.controller.move_gripper_release(goal)
         elif command == "place_panel":
             self.controller.place_panel(target,goal)
         elif command == "rewind_motion":
