@@ -483,7 +483,60 @@ class ProcessController(object):
         except Exception as err:
             traceback.print_exc()
             self._step_failed(err, goal)
-    
+            
+    def plan_gripper_release(self, goal =None):
+        self._begin_step(goal)
+        try:
+            self.rapid_node.set_digital_io("Vacuum_enable", 1)
+            #time.sleep(1)
+            
+            #TODO: check vacuum feedback to make sure we have the panel
+            pose_target2=self.controller_commander.compute_fk()
+            pose_target2.p[2] += 0.25
+            
+            self.current_payload=self.current_target
+            
+            gripper_to_panel_tf=self.tf_listener.lookupTransform("vacuum_gripper_tool", self.current_payload, rospy.Time(0))
+            world_to_gripper_tf=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
+            world_to_panel_nest_tf=self.tf_listener.lookupTransform("world", "panel_nest", rospy.Time(0))
+            panel_to_nest_tf=world_to_panel_nest_tf.inv()*world_to_gripper_tf*gripper_to_panel_tf
+            
+            self._update_payload_pose(self.current_payload, panel_to_nest_tf, "panel_nest", 0.5)
+            
+            self.current_payload=None
+            self.current_target=None
+            
+            
+            time.sleep(1)
+            
+            path=self._plan(pose_target2, config = "panel_pickup")
+
+            self.state="plan_gripper_release"
+            self.plan_dictionary['gripper_release']=path
+            rospy.loginfo("Finished gripper release")
+            self._step_complete(goal)
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
+        
+        
+    def move_gripper_release(self, goal=None):
+        self._begin_step(goal)
+        try:
+            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], [])
+            result=None
+            if(self.state!="plan_gripper_release"):
+                self.plan_gripper_release()
+            self.state="gripper_release"
+            #self.process_index=7
+            #self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
+            
+            path=self.plan_dictionary['gripper_release']
+            self._execute_path(path, goal)
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
+        
     def _fill_process_state(self):
         s=ProcessState()
         s.state=self.state if self.state is not None else ""
