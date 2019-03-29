@@ -36,6 +36,8 @@ import rospkg
 import os
 import numpy as np
 import general_robotics_toolbox as rox
+import general_robotics_toolbox.ros_msg as rox_msg
+from geometry_msgs.msg import Pose, PoseArray
 
 
 class Planner(object):
@@ -48,6 +50,7 @@ class Planner(object):
         self.tesseract_plotter = tesseract.ROSBasicPlotting(self.tesseract_env)
         self.tesseract_plotter.plotScene()
         self.controller_commander=controller_commander
+        self.waypoint_plotter = rospy.Publisher("process_planner_waypoints", PoseArray, queue_size=5)
         self.lock=threading.Lock()  
     
     def _tesseract_diff_cb(self, msg):
@@ -77,6 +80,13 @@ class Planner(object):
             joint_names = robot.joint_names            
             
             joint_positions = self.controller_commander.get_current_joint_values()
+            
+            p = PoseArray()
+            p.header.frame_id="world"
+            p.header.stamp=rospy.Time.now()
+            p.poses.append(rox_msg.transform2pose_msg(self.controller_commander.compute_fk(joint_positions)))
+            p.poses.append(rox_msg.transform2pose_msg(target_pose))
+            self.waypoint_plotter.publish(p)            
             
             self.tesseract_env.setState(joint_names, joint_positions)
             
