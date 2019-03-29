@@ -45,35 +45,36 @@ class ProcessControllerServer(object):
     def execute_cb(self, goal):        
         command = goal.get_goal().command
         target = goal.get_goal().target
+        mode = goal.get_goal().mode.mode
         
         if command == "plan_pickup_prepare":
             self.controller.plan_pickup_prepare(target, goal)
         elif command == "stop_motion":
             self.controller.stop_motion(goal)
         elif command == "move_pickup_prepare":
-            self.controller.move_pickup_prepare(goal)
+            self.controller.move_pickup_prepare(mode, goal)
         elif command == "plan_to_reset_position":
             self.controller.plan_to_reset_position(goal)
         elif command == "plan_pickup_lower":
             self.controller.plan_pickup_lower(goal)
         elif command == "move_pickup_lower":
-            self.controller.move_pickup_lower(goal)
+            self.controller.move_pickup_lower(mode, goal)
         elif command == "plan_pickup_grab_first_step":
             self.controller.plan_pickup_grab_first_step(goal)
         elif command == "move_pickup_grab_first_step":
-            self.controller.move_pickup_grab_first_step(goal)
+            self.controller.move_pickup_grab_first_step(mode, goal)
         elif command == "plan_pickup_grab_second_step":
             self.controller.plan_pickup_grab_second_step(goal)
         elif command == "move_pickup_grab_second_step":
-            self.controller.move_pickup_grab_second_step(goal)
+            self.controller.move_pickup_grab_second_step(mode, goal)
         elif command == "plan_pickup_raise":
             self.controller.plan_pickup_raise(goal)
         elif command == "move_pickup_raise":
-            self.controller.move_pickup_raise(goal)
+            self.controller.move_pickup_raise(mode, goal)
         elif command == "plan_transport_payload":
             self.controller.plan_transport_payload(target, goal)
         elif command == "move_transport_payload":
-            self.controller.move_transport_payload(goal)
+            self.controller.move_transport_payload(mode, goal)
         elif command == "plan_place_lower":
             self.controller.plan_place_lower()
         elif command == "move_place_lower":
@@ -91,11 +92,11 @@ class ProcessControllerServer(object):
         elif command == "move_place_raise":
             self.controller.move_place_raise()
         elif command == "reset_position":
-            self.controller.reset_position(goal)
+            self.controller.reset_position(mode, goal)
         elif command == "plan_gripper_release":
             self.controller.plan_gripper_release(goal)
         elif command == "move_gripper_release":
-            self.controller.move_gripper_release(goal)
+            self.controller.move_gripper_release(mode, goal)
         elif command == "place_panel":
             self.controller.place_panel(target,goal)
         elif command == "rewind_motion":

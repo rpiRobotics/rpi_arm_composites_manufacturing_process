@@ -37,7 +37,7 @@ import general_robotics_toolbox.ros_msg as rox_msg
 from general_robotics_toolbox import ros_tf as tf
 
 import rpi_abb_irc5.ros.rapid_commander as rapid_node_pkg
-import safe_kinematic_controller.ros.commander as controller_commander_pkg
+from safe_kinematic_controller.ros.commander import ControllerCommander
 from rpi_arm_composites_manufacturing_process.msg import ProcessState, ProcessStepResult
 from object_recognition_msgs.msg import ObjectRecognitionAction, ObjectRecognitionGoal
 
@@ -69,7 +69,7 @@ class ProcessController(object):
         self.urdf=URDF.from_parameter_server()
         self.overhead_vision_client=actionlib.SimpleActionClient("recognize_objects", ObjectRecognitionAction)        
         self.rapid_node = rapid_node_pkg.RAPIDCommander()
-        self.controller_commander=controller_commander_pkg.ControllerCommander()
+        self.controller_commander=ControllerCommander()
         self.state='init'
         self.current_target=None
         self.current_payload=None
@@ -168,7 +168,7 @@ class ProcessController(object):
             
             
     
-    def reset_position(self, goal = None):
+    def reset_position(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
         
         self._begin_step(goal)
         try:            
@@ -186,7 +186,7 @@ class ProcessController(object):
             rospy.loginfo("Executing reset position")
             
             self.controller_commander.set_controller_mode(self.controller_commander.MODE_HALT, self.speed_scalar,[], [])
-            self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
+            self.controller_commander.set_controller_mode(mode, self.speed_scalar,[], [])
                                     
             self._execute_path(path, goal)
         except Exception as err:
@@ -252,10 +252,10 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_pickup_prepare(self, goal = None):
+    def move_pickup_prepare(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
         self._begin_step(goal)
         try:
-            self.controller_commander.set_controller_mode(self.desired_controller_mode, self.speed_scalar,[], [])
+            self.controller_commander.set_controller_mode(mode, self.speed_scalar,[], [])
             result=None
             
             self.state="pickup_prepare"
@@ -291,10 +291,10 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_pickup_lower(self, goal = None):
+    def move_pickup_lower(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
         self._begin_step(goal)
         try:
-            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], self.get_payload_pickup_ft_threshold(self.current_target))
+            self.controller_commander.set_controller_mode(mode, 0.8*self.speed_scalar,[], self.get_payload_pickup_ft_threshold(self.current_target))
             result=None
             rospy.loginfo("moving_pickup_lower")
             if(self.state!="plan_pickup_lower"):
@@ -330,12 +330,12 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_pickup_grab_first_step(self, goal = None):
+    def move_pickup_grab_first_step(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
         
         self._begin_step(goal)
         
         try:
-            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [],\
+            self.controller_commander.set_controller_mode(mode, 0.8*self.speed_scalar, [],\
                                                           self.get_payload_pickup_ft_threshold(self.current_target))
             result=None
             if(self.state!="plan_pickup_grab_first_step"):
@@ -386,10 +386,10 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_pickup_grab_second_step(self, goal = None):
+    def move_pickup_grab_second_step(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
         self._begin_step(goal)
         try:
-            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], [])
+            self.controller_commander.set_controller_mode(mode, 0.8*self.speed_scalar,[], [])
             result=None
             if(self.state!="plan_pickup_grab_second_step"):
                 self.plan_pickup_grab_second_step()
@@ -427,10 +427,10 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_pickup_raise(self, goal = None):
+    def move_pickup_raise(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
         self._begin_step(goal)
         try:
-            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], [])
+            self.controller_commander.set_controller_mode(mode, 0.8*self.speed_scalar, [], [])
             result=None
             if(self.state!="plan_pickup_raise"):
                 self.plan_pickup_raise()
@@ -473,10 +473,10 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
 
-    def move_transport_payload(self, goal = None):
+    def move_transport_payload(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
         self._begin_step(goal)
         try:
-            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar, [], []) 
+            self.controller_commander.set_controller_mode(mode, 0.8*self.speed_scalar, [], []) 
             self.state="transport_payload"
             plan = self.plan_dictionary['transport_payload']
             self._execute_path(plan, goal)
@@ -521,10 +521,10 @@ class ProcessController(object):
             self._step_failed(err, goal)
         
         
-    def move_gripper_release(self, goal=None):
+    def move_gripper_release(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal=None):
         self._begin_step(goal)
         try:
-            self.controller_commander.set_controller_mode(self.desired_controller_mode, 0.8*self.speed_scalar,[], [])
+            self.controller_commander.set_controller_mode(mode, 0.8*self.speed_scalar,[], [])
             result=None
             if(self.state!="plan_gripper_release"):
                 self.plan_gripper_release()

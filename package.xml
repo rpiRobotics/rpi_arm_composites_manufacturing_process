@@ -76,6 +76,7 @@
   <exec_depend>rpi_general_robotics_toolbox_py</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>moveit_msgs</exec_depend>
+  <depend>control_msgs</depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

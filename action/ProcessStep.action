@@ -5,6 +5,7 @@
 #goal definition
 string command
 string target
+safe_kinematic_controller/ControllerMode mode
 ---
 #result definition
 string state
