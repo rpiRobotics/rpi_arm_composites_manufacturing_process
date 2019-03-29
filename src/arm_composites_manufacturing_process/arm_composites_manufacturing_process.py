@@ -194,16 +194,16 @@ class ProcessController(object):
             self._step_failed(err, goal)
             	
     def place_panel(self, target_payload, goal = None):
-        
+        self._begin_step(goal)
         if goal is None:
             self.controller_commander.execute_trajectory(path, ft_stop=ft_stop)
             return
             
                 
-        def done_cb(err):
-            rospy.loginfo("ibvs placement generated: %s",str(err))
+        def done_cb(status,result):
+            rospy.loginfo("ibvs placement generated success")
             if(goal is not None):                
-                if err is None:
+                if status == actionlib.GoalStatus.SUCCEEDED:
                     self._step_complete(goal)
                 else:
                     with self._goal_handle_lock:
@@ -213,9 +213,9 @@ class ProcessController(object):
                     res.state=self.state
                     res.target=self.current_target if self.current_target is not None else ""
                     res.payload=self.current_payload if self.current_payload is not None else ""
-                    res.error_msg=str(err)    
+                    res.error_msg=str(result.error_msg)    
                     goal.set_aborted(result=res)                    
-                    rospy.loginfo("safe_kinematic_controller generated: %s",str(err))
+                    rospy.loginfo("ibvs placement generated: %s",result.error_msg)
         
         with self._goal_handle_lock:
             placement_goal=_placement(target_payload)    
@@ -457,7 +457,7 @@ class ProcessController(object):
             pose_target=panel_target_pose * panel_gripper_pose            
             #pose_target.p = [1.97026484647054, 1.1179574262842452, 0.12376598588449844]
             #pose_target.R = np.array([[-0.99804142,  0.00642963,  0.06222524], [ 0.00583933,  0.99993626, -0.00966372], [-0.06228341, -0.00928144, -0.99801535]])
-            pose_target.p[1] += -0.35
+            #pose_target.p[1] += -0.35
             pose_target.p[2] += 0.40
     
     
@@ -487,14 +487,15 @@ class ProcessController(object):
     def plan_gripper_release(self, goal =None):
         self._begin_step(goal)
         try:
-            self.rapid_node.set_digital_io("Vacuum_enable", 1)
+            self.rapid_node.set_digital_io("Vacuum_enable", 0)
             #time.sleep(1)
             
             #TODO: check vacuum feedback to make sure we have the panel
             pose_target2=self.controller_commander.compute_fk()
             pose_target2.p[2] += 0.25
             
-            self.current_payload=self.current_target
+            #self.current_payload=self.current_target
+            
             
             gripper_to_panel_tf=self.tf_listener.lookupTransform("vacuum_gripper_tool", self.current_payload, rospy.Time(0))
             world_to_gripper_tf=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
