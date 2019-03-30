@@ -10,6 +10,8 @@ from geometry_msgs.msg import Pose, Point, Vector3
 from ibvs_object_placement.msg import PlacementStepAction, PlacementStepGoal, PlacementCommand, IBVSParameters, ComplianceControlParameters
 from scipy.io import loadmat
 from industrial_payload_manager.msg import ArucoGridboard
+import rospkg
+import os
 
 def _finished_client(self,state,result):
     print "feedback received"
@@ -58,11 +60,11 @@ def _placement(panel_type,done_cb=None):
         return point_array
     
     if(panel_type=='leeward_mid_panel'):
-        placement_command.rvec_difference_stage1=wrap_vector3(loadmat('/home/rpi-cats/Desktop/DJ/Ideal Position/Panel1_Cam_636_object_points_ground_tag_in_panel_frame_Above_Nest.mat')['rvec_difference'])
-        placement_command.tvec_difference_stage1=wrap_vector3( loadmat('/home/rpi-cats/Desktop/DJ/Ideal Position/Panel1_Cam_636_object_points_ground_tag_in_panel_frame_Above_Nest.mat')['tvec_difference'])
-        placement_command.rvec_difference_stage2=wrap_vector3(loadmat('/home/rpi-cats/Desktop/DJ/Ideal Position/Panel1_Cam_636_object_points_ground_tag_in_panel_frame_In_Nest.mat')['rvec_difference'])
-        placement_command.tvec_difference_stage2=wrap_vector3( loadmat('/home/rpi-cats/Desktop/DJ/Ideal Position/Panel1_Cam_636_object_points_ground_tag_in_panel_frame_In_Nest.mat')['tvec_difference'])
-        placement_command.point_difference_stage2=wrap_points(loadmat('/home/rpi-cats/Desktop/DJ/Ideal Position/Panel1_Cam_636_object_points_ground_tag_in_panel_frame_In_Nest.mat')['object_points_ground_in_panel_tag_system'])
+        placement_command.rvec_difference_stage1=wrap_vector3(loadmat(os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_process'), 'config/Panel1_Cam_636_object_points_ground_tag_in_panel_frame_Above_Nest.mat'))['rvec_difference'])
+        placement_command.tvec_difference_stage1=wrap_vector3( loadmat(os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_process'),'config/Panel1_Cam_636_object_points_ground_tag_in_panel_frame_Above_Nest.mat'))['tvec_difference'])
+        placement_command.rvec_difference_stage2=wrap_vector3(loadmat(os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_process'),'config/Panel1_Cam_636_object_points_ground_tag_in_panel_frame_In_Nest.mat'))['rvec_difference'])
+        placement_command.tvec_difference_stage2=wrap_vector3( loadmat(os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_process'),'config/Panel1_Cam_636_object_points_ground_tag_in_panel_frame_In_Nest.mat'))['tvec_difference'])
+        placement_command.point_difference_stage2=wrap_points(loadmat(os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_process'),'config/Panel1_Cam_636_object_points_ground_tag_in_panel_frame_In_Nest.mat'))['object_points_ground_in_panel_tag_system'])
         initial_place=Pose()
         initial_place.position.x=2.15484
         initial_place.position.y=1.21372
