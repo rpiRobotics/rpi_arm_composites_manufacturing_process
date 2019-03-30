@@ -155,17 +155,22 @@ class ProcessController(object):
             self.controller_commander.stop_trajectory()
             
     def rewind_motion(self, goal):
-        if(self.process_index!=None and self.process_index!=0):
+        no_rewind_list=[None,0,4,5,7,8]
+        self._begin_step(goal)
+        if(self.process_index not in no_rewind_list):
             rewind_target_pose=self.process_starts[self.process_states[self.process_index]]
-            path=self._plan(rewind_target_pose, config="position_robot")
+            path=self._plan(rewind_target_pose, config="reposition_robot")
+            
             try:
+                
                 self._execute_path(path, goal)
                 self.process_index-=1
                 self.state=self.process_states[self.process_index]
                 
             except Exception as err:
                 self._step_failed(err, goal)
-            
+        else:
+            self._step_failed("Rewind Unavailable, Please Manually Reposition Robot",goal)
             
     
     def reset_position(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
@@ -216,7 +221,8 @@ class ProcessController(object):
                     res.error_msg=str(result.error_msg)    
                     goal.set_aborted(result=res)                    
                     rospy.loginfo("ibvs placement generated: %s",result.error_msg)
-        
+        self.process_index=7
+        self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
         with self._goal_handle_lock:
             placement_goal=_placement(target_payload)    
             client_handle=self.placement_client.send_goal(placement_goal,done_cb=done_cb)
@@ -478,6 +484,8 @@ class ProcessController(object):
         try:
             self.controller_commander.set_controller_mode(mode, 0.8*self.speed_scalar, [], []) 
             self.state="transport_payload"
+            self.process_index=6
+            self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
             plan = self.plan_dictionary['transport_payload']
             self._execute_path(plan, goal)
         except Exception as err:
@@ -529,8 +537,8 @@ class ProcessController(object):
             if(self.state!="plan_gripper_release"):
                 self.plan_gripper_release()
             self.state="gripper_release"
-            #self.process_index=7
-            #self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
+            self.process_index=8
+            self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
             
             path=self.plan_dictionary['gripper_release']
             self._execute_path(path, goal)
@@ -622,7 +630,7 @@ class ProcessController(object):
                 res.state=self.state
                 res.target=self.current_target if self.current_target is not None else ""
                 res.payload=self.current_payload if self.current_payload is not None else ""
-                res.error_msg=str(err)    
+                res.error_msg=str(err)   
                 goal.set_aborted(result=res)
                 if (self._goal_handle == goal):
                     self._goal_handle=None
