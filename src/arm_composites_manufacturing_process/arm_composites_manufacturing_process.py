@@ -197,7 +197,7 @@ class ProcessController(object):
             traceback.print_exc()
             self._step_failed(err, goal)
             
-    def reset_position(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
+    def move_reset_position(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
         
         self._begin_step(goal)
         try:            
