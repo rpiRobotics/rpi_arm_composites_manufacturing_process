@@ -173,7 +173,7 @@ class ProcessController(object):
             self._step_failed("Rewind Unavailable, Please Manually Reposition Robot",goal)
             
     
-    def reset_position(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
+    def plan_reset_position(self, goal = None):
         
         self._begin_step(goal)
         try:            
@@ -188,11 +188,24 @@ class ProcessController(object):
             
             path=self._plan(pose_target, config = "reposition_robot")
             
-            rospy.loginfo("Executing reset position")
+            self.plan_dictionary['reset_position']=path
+            
+            self._step_complete(goal)
+            
+            
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
+            
+    def reset_position(self, mode = ControllerCommander.MODE_AUTO_TRAJECTORY, goal = None):
+        
+        self._begin_step(goal)
+        try:            
+            
             
             self.controller_commander.set_controller_mode(self.controller_commander.MODE_HALT, self.speed_scalar,[], [])
             self.controller_commander.set_controller_mode(mode, self.speed_scalar,[], [])
-                                    
+            path=self.plan_dictionary['reset_position']      
             self._execute_path(path, goal)
         except Exception as err:
             traceback.print_exc()

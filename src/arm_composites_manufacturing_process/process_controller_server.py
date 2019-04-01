@@ -91,8 +91,10 @@ class ProcessControllerServer(object):
             self.controller.plan_place_raise()
         elif command == "move_place_raise":
             self.controller.move_place_raise()
-        elif command == "reset_position":
-            self.controller.reset_position(mode, goal)
+        elif command == "plan_reset_position":
+            self.controller.plan_reset_position(goal)
+        elif command == "move_reset_position":
+            self.controller.move_reset_position(mode, goal)
         elif command == "plan_gripper_release":
             self.controller.plan_gripper_release(goal)
         elif command == "move_gripper_release":
