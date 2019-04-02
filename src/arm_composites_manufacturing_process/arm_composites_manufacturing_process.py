@@ -77,9 +77,7 @@ class ProcessController(object):
         self.desired_controller_mode=self.controller_commander.MODE_AUTO_TRAJECTORY
         self.speed_scalar=1.0
         self.disable_ft=disable_ft        
-        self.YC_place_code=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'Vision_MoveIt_new_Cam_WL_Jcam2_DJ_01172019_Panel1.py')
-        self.YC_place_code2=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'Vision_MoveIt_new_Cam_WL_Jcam2_DJ_01172019_Panel2.py')
-        self.YC_transport_code=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_gui'), 'src', 'rpi_arm_composites_manufacturing_gui', 'test_moveit_commander_custom_trajectory_YC_TransportPath_Panels.py')
+        
         self.tf_listener=PayloadTransformListener()
         self._process_state_pub = rospy.Publisher("process_state", ProcessState, queue_size=100, latch=True)
         self.publish_process_state()
@@ -154,23 +152,41 @@ class ProcessController(object):
         with self._goal_handle_lock:
             self.controller_commander.stop_trajectory()
             
-    def rewind_motion(self, goal):
+    def plan_rewind_motion(self, goal):
         no_rewind_list=[None,0,4,5,7,8]
         self._begin_step(goal)
         if(self.process_index not in no_rewind_list):
-            rewind_target_pose=self.process_starts[self.process_states[self.process_index]]
-            path=self._plan(rewind_target_pose, config="reposition_robot")
-            
             try:
-                
-                self._execute_path(path, goal)
-                self.process_index-=1
-                self.state=self.process_states[self.process_index]
-                
+                if(self.process_index==3):
+                    self.process_index-=1
+                    rewind_target_pose=self.process_starts[self.process_states[self.process_index]]
+                    
+                else:
+                    rewind_target_pose=self.process_starts[self.process_states[self.process_index]]
+                path=self._plan(rewind_target_pose, config="reposition_robot")
+                self.plan_dictionary['rewind_motion']=path
+                self._step_complete(goal)
             except Exception as err:
+                traceback.print_exc()
                 self._step_failed(err, goal)
+            
         else:
             self._step_failed("Rewind Unavailable, Please Manually Reposition Robot",goal)
+            
+            
+    def move_rewind_motion(self,mode,goal):
+        self._begin_step(goal)
+        try:
+            self.controller_commander.set_controller_mode(mode, self.speed_scalar,[], [])
+            path=self.plan_dictionary['rewind_motion']
+            
+            self._execute_path(path, goal)
+            self.process_index-=1
+            self.state=self.process_states[self.process_index]
+                
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
             
     
     def plan_reset_position(self, goal = None):
