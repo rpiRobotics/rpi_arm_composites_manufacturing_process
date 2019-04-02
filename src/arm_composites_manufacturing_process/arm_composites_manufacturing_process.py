@@ -154,23 +154,35 @@ class ProcessController(object):
         with self._goal_handle_lock:
             self.controller_commander.stop_trajectory()
             
-    def rewind_motion(self, goal):
+    def plan_rewind_motion(self, goal):
         no_rewind_list=[None,0,4,5,7,8]
         self._begin_step(goal)
         if(self.process_index not in no_rewind_list):
-            rewind_target_pose=self.process_starts[self.process_states[self.process_index]]
-            path=self._plan(rewind_target_pose, config="reposition_robot")
-            
             try:
-                
-                self._execute_path(path, goal)
-                self.process_index-=1
-                self.state=self.process_states[self.process_index]
-                
+                rewind_target_pose=self.process_starts[self.process_states[self.process_index]]
+                path=self._plan(rewind_target_pose, config="reposition_robot")
+                self.plan_dictionary['rewind_motion']=path
             except Exception as err:
+                traceback.print_exc()
                 self._step_failed(err, goal)
+            
         else:
             self._step_failed("Rewind Unavailable, Please Manually Reposition Robot",goal)
+            
+            
+    def move_rewind_motion(self,mode,goal):
+        self._begin_step(goal)
+        try:
+            self.controller_commander.set_controller_mode(mode, self.speed_scalar,[], [])
+            path=self.plan_dictionary['rewind_motion']
+            
+            self._execute_path(path, goal)
+            self.process_index-=1
+            self.state=self.process_states[self.process_index]
+                
+        except Exception as err:
+            traceback.print_exc()
+            self._step_failed(err, goal)
             
     
     def plan_reset_position(self, goal = None):

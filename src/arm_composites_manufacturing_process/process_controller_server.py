@@ -101,8 +101,10 @@ class ProcessControllerServer(object):
             self.controller.move_gripper_release(mode, goal)
         elif command == "place_panel":
             self.controller.place_panel(target,goal)
-        elif command == "rewind_motion":
-            self.controller.rewind_motion(goal)
+        elif command == "plan_rewind_motion":
+            self.controller.plan_rewind_motion(goal)
+        elif command == "move_rewind_motion":
+            self.controller.move_rewind_motion(mode,goal)
         else:
             goal.set_rejected()
             assert False, "Invalid command"
