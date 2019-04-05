@@ -1,0 +1,18 @@
+header: 
+  seq: 0
+  stamp: 
+    secs: 0
+    nsecs: 0
+  frame_id: "panel_nest_marker_1"
+child_frame_id: "leeward_mid_panel_marker_2"
+transform: 
+  translation: 
+    x: -0.034365878326511515
+    y: -0.14329986464587005
+    z: 0.10236951973104225
+  rotation: 
+    x: -0.007796593304547264
+    y: -0.045893638177524274
+    z: 0.005545970385963756
+    w: 0.9989005102211891
+

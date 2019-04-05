@@ -35,6 +35,8 @@ import general_robotics_toolbox as rox
 import general_robotics_toolbox.urdf as urdf
 import general_robotics_toolbox.ros_msg as rox_msg
 from general_robotics_toolbox import ros_tf as tf
+import yaml
+import genpy
 
 import rpi_abb_irc5.ros.rapid_commander as rapid_node_pkg
 from safe_kinematic_controller.ros.commander import ControllerCommander
@@ -47,7 +49,8 @@ from industrial_payload_manager.srv import UpdatePayloadPose, UpdatePayloadPoseR
 import time
 import sys
 import os
-
+from geometry_msgs.msg import Wrench, Vector3, TransformStamped
+from pbvs_object_placement.msg import PBVSPlacementAction, PBVSPlacementGoal
 import threading
 import traceback
 import resource_retriever
@@ -81,7 +84,7 @@ class ProcessController(object):
         self.tf_listener=PayloadTransformListener()
         self._process_state_pub = rospy.Publisher("process_state", ProcessState, queue_size=100, latch=True)
         self.publish_process_state()
-        self.placement_client=actionlib.SimpleActionClient('placement_step', PlacementStepAction)
+        self.placement_client=actionlib.SimpleActionClient('placement_step', PBVSPlacementAction)
         self.placement_client.wait_for_server()
         self.update_payload_pose_srv=rospy.ServiceProxy("update_payload_pose", UpdatePayloadPose)
         self.get_payload_array_srv=rospy.ServiceProxy("get_payload_array", GetPayloadArray)
@@ -91,7 +94,7 @@ class ProcessController(object):
         self.plan_dictionary={}
         self.process_starts={}
         self.process_index=None
-        self.process_states=["reset_position","pickup_prepare","pickup_lower","pickup_grab_first_step","pickup_grab_second_step","pickup_raise","transport_payload","place_payload"]
+        self.process_states=["reset_position","pickup_prepare","pickup_lower","pickup_grab_first_step","pickup_grab_second_step","pickup_raise","transport_payload","place_payload","gripper_release"]
         
         self.planner=Planner(self.controller_commander, urdf_xml_string, srdf_xml_string)
         
@@ -229,9 +232,7 @@ class ProcessController(object):
             	
     def place_panel(self, target_payload, goal = None):
         self._begin_step(goal)
-        if goal is None:
-            self.controller_commander.execute_trajectory(path, ft_stop=ft_stop)
-            return
+        
             
                 
         def done_cb(status,result):
@@ -253,7 +254,24 @@ class ProcessController(object):
         self.process_index=7
         self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
         with self._goal_handle_lock:
-            placement_goal=_placement(target_payload)    
+            
+            placement_goal=PBVSPlacementGoal()
+            placement_goal.desired_transform=self.load_placement_target_config(target_payload)
+            placement_goal.stage1_kp=np.array([0.7]*6)
+            placement_goal.stage2_kp=np.array([0.7]*6)
+            placement_goal.stage3_kp=np.array([0.5]*6)
+            placement_goal.stage1_tol_p=0.05
+            placement_goal.stage1_tol_r=np.deg2rad(1)
+            placement_goal.stage2_tol_p=0.05
+            placement_goal.stage2_tol_r=np.deg2rad(1)
+            placement_goal.stage3_tol_p=0.001
+            placement_goal.stage3_tol_r=np.deg2rad(0.05)
+            placement_goal.stage2_z_offset=0.05
+
+            placement_goal.abort_force=Wrench(Vector3(500,500,500),Vector3(100,100,100))
+            placement_goal.placement_force=Wrench(Vector3(0,0,300),Vector3(0,0,0))
+            placement_goal.force_ki=np.array([1e-6]*6)
+                
             client_handle=self.placement_client.send_goal(placement_goal,done_cb=done_cb)
     	
     def plan_pickup_prepare(self, target_payload, goal = None):
@@ -520,6 +538,22 @@ class ProcessController(object):
         except Exception as err:
             traceback.print_exc()
             self._step_failed(err, goal)
+
+    def load_placement_target_config(self,target_payload):
+        if(target_payload=="leeward_mid_panel"):
+            transform_fname=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_process'), 'config', 'leeward_mid_panel_marker_transform.yaml')
+            
+        elif(target_payload=="leeward_tip_panel"):
+            transform_fname=os.path.join(rospkg.RosPack().get_path('rpi_arm_composites_manufacturing_process'), 'config', 'leeward_tip_panel_marker_transform.yaml')
+
+        desired_transform_msg=TransformStamped()
+        
+        with open(transform_fname,'r') as f:
+            transform_yaml = yaml.load(f)
+            
+        genpy.message.fill_message_args(desired_transform_msg, transform_yaml)
+        
+        return desired_transform_msg
             
     def plan_gripper_release(self, goal =None):
         self._begin_step(goal)
