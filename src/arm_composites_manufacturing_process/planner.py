@@ -149,4 +149,90 @@ class Planner(object):
             
             return jt
     
+    def trajopt_smooth_trajectory(self, trajectory_in, json_config_str=None, json_config_name=None):
+        
+        with self.lock:
+        
+            if (json_config_str is None and json_config_name is not None):
+                json_config_str = self.load_json_config(json_config_name)
+        
+            robot = self.controller_commander.rox_robot
+            
+            #vel_upper_lim = np.array(robot.joint_vel_limit) * speed_scalar
+            #vel_lower_lim = -vel_upper_lim
+            #joint_lower_limit = np.array(robot.joint_lower_limit)
+            #joint_upper_limit = np.array(robot.joint_upper_limit)
+            joint_names = trajectory_in.joint_names
+            
+            joint_positions = trajectory_in.points[0].positions
+            
+            self.tesseract_env.setState(joint_names, joint_positions)
+            
+            init_pos = self.tesseract_env.getCurrentJointValues()
+            self.tesseract_plotter.plotTrajectory(self.tesseract_env.getJointNames(), np.reshape(init_pos,(1,6)));
+        
+            planner = tesseract.TrajOptPlanner()
+            
+            manip="move_group"
+            end_effector="vacuum_gripper_tool"
+            
+            pci = tesseract.ProblemConstructionInfo(self.tesseract_env)
+    
+            pci.fromJson(json_config_str)
+    
+            pci.kin = self.tesseract_env.getManipulator(manip)
+                        
+            pci.init_info.type = tesseract.InitInfo.STATIONARY
+            #pci.init_info.dt=0.5
+            
+            for i in xrange(14):
+                joint_constraint = tesseract.JointPosTermInfo()
+                joint_constraint.targets = tesseract.DblVec(trajectory_in.points[i].positions)
+                joint_constraint.first_step = i*10
+                joint_constraint.last_step = i*10
+                joint_constraint.upper_tols = tesseract.DblVec(np.array([np.deg2rad(0.1)]*6))
+                joint_constraint.lower_tols = tesseract.DblVec(np.array([np.deg2rad(-0.1)]*6))
+                joint_constraint.term_type = tesseract.TT_COST
+                joint_constraint.coeffs = tesseract.DblVec([1000]*6)
+                pci.cost_infos.push_back(joint_constraint)
+            
+            joint_constraint = tesseract.JointPosTermInfo()
+            print trajectory_in.points[-1].positions
+            joint_constraint.targets = tesseract.DblVec(trajectory_in.points[-1].positions)
+            joint_constraint.first_step = pci.basic_info.n_steps-1
+            joint_constraint.last_step = pci.basic_info.n_steps-1
+            #joint_constraint.upper_tols = tesseract.DblVec(np.array([np.deg2rad(0.1)]*6))
+            #joint_constraint.lower_tols = tesseract.DblVec(np.array([np.deg2rad(-0.1)]*6))
+            joint_constraint.coeffs = tesseract.DblVec([10000]*6)
+            joint_constraint.term_type = tesseract.TT_COST
+            pci.cost_infos.push_back(joint_constraint)
+            
+            prob = tesseract.ConstructProblem(pci)
+            
+            config = tesseract.TrajOptPlannerConfig(prob)
+            
+            config.params.max_iter = 100000
+            
+            planning_response = planner.solve(config)
+            
+            if (planning_response.status_code != 0):
+                raise Exception("TrajOpt trajectory planning failed with code: %d" % planning_response.status_code )
+            
+            self.tesseract_plotter.plotTrajectory(self.tesseract_env.getJointNames(), planning_response.trajectory[:,0:6])
+            
+            jt = JointTrajectory()
+            jt.header.stamp = rospy.Time.now()
+            jt.joint_names = joint_names
+            
+            trajectory_time = np.cumsum(1.0/planning_response.trajectory[:,6])
+            trajectory_time = trajectory_time - trajectory_time[0]
+            
+            for i in xrange(planning_response.trajectory.shape[0]):
+                jt_p=JointTrajectoryPoint()
+                jt_p.time_from_start=rospy.Duration(trajectory_time[i])
+                jt_p.positions = planning_response.trajectory[i,0:6]
+                jt.points.append(jt_p)
+            
+            return jt
+    
         
