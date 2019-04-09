@@ -20,7 +20,6 @@
       {
         "coeffs" : [40],
         "continuous": true,
-        "gap": 0.01,
         "dist_pen" : [0.025]
       }
     },    
