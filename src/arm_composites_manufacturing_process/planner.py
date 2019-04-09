@@ -64,7 +64,7 @@ class Planner(object):
         with open(file_path, 'r') as f:
             return f.read()
 
-    def trajopt_plan(self, target_pose, json_config_str=None, json_config_name=None):
+    def trajopt_plan(self, target_pose, json_config_str=None, json_config_name=None, target_joints=None):
         
         with self.lock:
         
@@ -81,12 +81,13 @@ class Planner(object):
             
             joint_positions = self.controller_commander.get_current_joint_values()
             
-            p = PoseArray()
-            p.header.frame_id="world"
-            p.header.stamp=rospy.Time.now()
-            p.poses.append(rox_msg.transform2pose_msg(self.controller_commander.compute_fk(joint_positions)))
-            p.poses.append(rox_msg.transform2pose_msg(target_pose))
-            self.waypoint_plotter.publish(p)            
+            if target_pose is not None:
+                p = PoseArray()
+                p.header.frame_id="world"
+                p.header.stamp=rospy.Time.now()
+                p.poses.append(rox_msg.transform2pose_msg(self.controller_commander.compute_fk(joint_positions)))
+                p.poses.append(rox_msg.transform2pose_msg(target_pose))
+                self.waypoint_plotter.publish(p)            
             
             self.tesseract_env.setState(joint_names, joint_positions)
             
@@ -107,18 +108,31 @@ class Planner(object):
             pci.init_info.type = tesseract.InitInfo.STATIONARY
             #pci.init_info.dt=0.5
             
-            #Final target_pose constraint
-            pose_constraint = tesseract.CartPoseTermInfo()
-            pose_constraint.term_type = tesseract.TT_CNT
-            pose_constraint.link = end_effector
-            pose_constraint.timestep = pci.basic_info.n_steps-1            
-            q=rox.R2q(target_pose.R)            
-            pose_constraint.wxyz = np.array(q)
-            pose_constraint.xyz = np.array(target_pose.p)
-            pose_constraint.pos_coefs = np.array([1000000,1000000,1000000], dtype=np.float64)
-            pose_constraint.rot_coefs = np.array([10000,10000,10000], dtype=np.float64)
-            pose_constraint.name = "final_pose"
-            pci.cnt_infos.push_back(pose_constraint)
+            if target_pose is not None:
+                #Final target_pose constraint
+                pose_constraint = tesseract.CartPoseTermInfo()
+                pose_constraint.term_type = tesseract.TT_CNT
+                pose_constraint.link = end_effector
+                pose_constraint.timestep = pci.basic_info.n_steps-1            
+                q=rox.R2q(target_pose.R)            
+                pose_constraint.wxyz = np.array(q)
+                pose_constraint.xyz = np.array(target_pose.p)
+                pose_constraint.pos_coefs = np.array([1000000,1000000,1000000], dtype=np.float64)
+                pose_constraint.rot_coefs = np.array([10000,10000,10000], dtype=np.float64)
+                pose_constraint.name = "final_pose"
+                pci.cnt_infos.push_back(pose_constraint)
+            elif target_joints is not None:
+                joint_constraint = tesseract.JointPosTermInfo()
+                joint_constraint.term_type = tesseract.TT_CNT
+                joint_constraint.link = end_effector
+                joint_constraint.first_step = pci.basic_info.n_steps-2
+                joint_constraint.last_step = pci.basic_info.n_steps-1
+                #joint_constraint.coeffs = tesseract.DblVec([10000]*6)
+                joint_constraint.targets = tesseract.DblVec(list(target_joints))
+                print target_joints
+                pci.cnt_infos.push_back(joint_constraint)
+            else:
+                assert False
         
                             
             prob = tesseract.ConstructProblem(pci)

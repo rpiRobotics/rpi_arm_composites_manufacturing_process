@@ -61,7 +61,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 import subprocess
 from .planner import Planner
 from .generate_placement_action import _placement
-from ibvs_object_placement.msg import PlacementStepAction
+
 
 
 class ProcessController(object):
@@ -85,7 +85,7 @@ class ProcessController(object):
         self._process_state_pub = rospy.Publisher("process_state", ProcessState, queue_size=100, latch=True)
         self.publish_process_state()
         self.placement_client=actionlib.SimpleActionClient('placement_step', PBVSPlacementAction)
-        self.placement_client.wait_for_server()
+        #self.placement_client.wait_for_server()
         self.update_payload_pose_srv=rospy.ServiceProxy("update_payload_pose", UpdatePayloadPose)
         self.get_payload_array_srv=rospy.ServiceProxy("get_payload_array", GetPayloadArray)
         self._goal_handle=None
@@ -423,7 +423,7 @@ class ProcessController(object):
             time.sleep(1)
 
             pose_target2=copy.deepcopy(self.object_target)
-            pose_target2.p[2] += 0.15   
+            pose_target2.p[2] += 0.20   
             
 
               
@@ -433,7 +433,7 @@ class ProcessController(object):
 
             self.state="plan_pickup_grab_second_step"
             self.plan_dictionary['pickup_grab_second_step']=path
-            rospy.loginfo("Finish pickup_grab for payload %s", self.current_target)
+            rospy.loginfo("Finish pickup_grab for payload %s", self.current_payload)
             self._step_complete(goal)
         except Exception as err:
             traceback.print_exc()
