@@ -139,7 +139,7 @@ class Planner(object):
             
             config = tesseract.TrajOptPlannerConfig(prob)
             
-            config.params.max_iter = 100000
+            config.params.max_iter = 1000
             
             planning_response = planner.solve(config)
             
@@ -217,7 +217,7 @@ class Planner(object):
             joint_constraint.last_step = pci.basic_info.n_steps-1
             #joint_constraint.upper_tols = tesseract.DblVec(np.array([np.deg2rad(0.1)]*6))
             #joint_constraint.lower_tols = tesseract.DblVec(np.array([np.deg2rad(-0.1)]*6))
-            joint_constraint.coeffs = tesseract.DblVec([10000]*6)
+            joint_constraint.coeffs = tesseract.DblVec([100000]*6)
             joint_constraint.term_type = tesseract.TT_COST
             pci.cost_infos.push_back(joint_constraint)
             
@@ -225,7 +225,7 @@ class Planner(object):
             
             config = tesseract.TrajOptPlannerConfig(prob)
             
-            config.params.max_iter = 100000
+            config.params.max_iter = 1000
             
             planning_response = planner.solve(config)
             

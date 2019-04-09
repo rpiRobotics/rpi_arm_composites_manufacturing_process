@@ -1,12 +1,12 @@
 {
   "basic_info" :
   {
-    "n_steps" : 15,
+    "n_steps" : 50,
     "manip" : "move_group",
     "dt_lower_lim" : 1,
     "dt_upper_lim" : 100,
-    "start_fixed" : true,
-	"use_time" : true
+    "use_time" : true,
+    "start_fixed" : true
   },
   "init_info":
   {
@@ -22,7 +22,15 @@
         "continuous": true,
         "dist_pen" : [0.025]
       }
-    },   
+    },    
+    {
+      "type" : "joint_jerk",
+      "params" :
+      {
+        "targets" : [0],
+        "coeffs" : [5]
+      }
+    },    
     {
       "type" : "joint_vel",
       "name" : "joint_vel_1",
@@ -31,7 +39,7 @@
         "targets" : [0],
         "coeffs" : [1000],
         "first_step" : 0,
-        "last_step" : -1
+        "last_step" : 49
       }
     },
     {
@@ -40,7 +48,40 @@
       {
         "coeff" : 5
       }
-    }     
+    },
+    {
+      "type" : "joint_vel",
+      "name" : "joint_vel_start",
+      "params" :
+      {
+        "targets" : [0,0,0,0,0,0],
+        "coeffs" : [100000],
+        "first_step" : 0,
+        "last_step" : 2
+        
+      }
+    },
+    {
+      "type" : "joint_vel",
+      "name" : "joint_vel_end",
+      "params" :
+      {
+        "targets" : [0,0,0,0,0,0],
+        "coeffs" : [100000],
+        "first_step" : 47,
+        "last_step" : 49
+        
+      }
+    },
+    {
+      "type" : "joint_acc",
+      "name" : "joint_acc_cost",
+      "params" :
+      {
+        "targets" : [0, 0, 0, 0, 0, 0],        
+        "coeffs" : [100000]        
+      }
+    }    
   ],
   "constraints" :
   [

@@ -205,7 +205,7 @@ class ProcessController(object):
             
             pose_target=rox.Transform(rox.q2R(Q), np.copy(P))
             
-            path=self._plan(pose_target, config = "reposition_robot")
+            path=self._plan(pose_target, config = "reposition_robot", smoother_config = "reposition_robot_smoother")
             
             self.plan_dictionary['reset_position']=path
             
@@ -293,7 +293,7 @@ class ProcessController(object):
             rospy.loginfo("Prepare pickup %s at pose %s", target_payload, object_target)
             print pose_target.p
             
-            path=self._plan(pose_target, config = "reposition_robot")
+            path=self._plan(pose_target, config = "reposition_robot", smoother_config = "reposition_robot_smoother")
 
             self.current_target=target_payload
             self.state="plan_pickup_prepare"
@@ -515,7 +515,7 @@ class ProcessController(object):
     
     
             #plan=self.controller_commander.plan(pose_target)
-            plan = self._plan(pose_target, config ="transport_panel")
+            plan = self._plan(pose_target, config ="transport_panel", smoother_config = "transport_panel_smoother")
             
             self.current_target=target
             self.state="plan_transport_payload"
@@ -739,8 +739,11 @@ class ProcessController(object):
             self.controller_commander.async_execute_trajectory(path, done_cb=done_cb, ft_stop=ft_stop)
         
 
-    def _plan(self, target_pose, waypoints_pose=[], speed_scalar = 1, config = None):
-        return self.planner.trajopt_plan(target_pose, json_config_name = config)
+    def _plan(self, target_pose, waypoints_pose=[], speed_scalar = 1, config = None, smoother_config = None):
+        plan1 = self.planner.trajopt_plan(target_pose, json_config_name = config)
+        if smoother_config is None:
+            return plan1
+        return self.planner.trajopt_smooth_trajectory(plan1, json_config_name = smoother_config)
 
     
             
