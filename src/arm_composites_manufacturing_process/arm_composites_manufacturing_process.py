@@ -156,7 +156,7 @@ class ProcessController(object):
             self.controller_commander.stop_trajectory()
             
     def plan_rewind_motion(self, goal):
-        no_rewind_list=[None,0,4,5,7,8]
+        no_rewind_list=[None,0,4,5,8]
         self._begin_step(goal)
         if(self.process_index not in no_rewind_list):
             try:
@@ -166,7 +166,7 @@ class ProcessController(object):
                     
                 else:
                     rewind_target_pose=self.process_starts[self.process_states[self.process_index]]
-                path=self._plan(rewind_target_pose, config="reposition_robot")
+                path=self._plan(rewind_target_pose, config = "reposition_robot", smoother_config = "reposition_robot_smoother")
                 self.plan_dictionary['rewind_motion']=path
                 self._step_complete(goal)
             except Exception as err:
@@ -250,7 +250,7 @@ class ProcessController(object):
                     res.payload=self.current_payload if self.current_payload is not None else ""
                     res.error_msg=str(result.error_msg)    
                     goal.set_aborted(result=res)                    
-                    rospy.loginfo("ibvs placement generated: %s",result.error_msg)
+                    rospy.loginfo("pbvs placement generated: %s",result.error_msg)
         self.process_index=7
         self.process_starts[self.process_states[self.process_index]]=self.get_current_pose()
         with self._goal_handle_lock:
@@ -259,13 +259,13 @@ class ProcessController(object):
             placement_goal.desired_transform=self.load_placement_target_config(target_payload)
             placement_goal.stage1_kp=np.array([0.7]*6)
             placement_goal.stage2_kp=np.array([0.7]*6)
-            placement_goal.stage3_kp=np.array([0.5]*6)
+            placement_goal.stage3_kp=np.array([0.3]*6)
             placement_goal.stage1_tol_p=0.05
             placement_goal.stage1_tol_r=np.deg2rad(1)
             placement_goal.stage2_tol_p=0.05
             placement_goal.stage2_tol_r=np.deg2rad(1)
             placement_goal.stage3_tol_p=0.001
-            placement_goal.stage3_tol_r=np.deg2rad(0.05)
+            placement_goal.stage3_tol_r=np.deg2rad(0.5)
             placement_goal.stage2_z_offset=0.05
 
             placement_goal.abort_force=Wrench(Vector3(500,500,500),Vector3(100,100,100))
