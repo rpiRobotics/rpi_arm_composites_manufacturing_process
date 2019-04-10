@@ -740,10 +740,18 @@ class ProcessController(object):
         
 
     def _plan(self, target_pose, waypoints_pose=[], speed_scalar = 1, config = None, smoother_config = None):
-        plan1 = self.planner.trajopt_plan(target_pose, json_config_name = config)
-        if smoother_config is None:
-            return plan1
-        return self.planner.trajopt_smooth_trajectory(plan1, json_config_name = smoother_config)
+        error_count=0
+        while True:
+            try:
+                plan1 = self.planner.trajopt_plan(target_pose, json_config_name = config)
+                if smoother_config is None:
+                    return plan1
+                return self.planner.trajopt_smooth_trajectory(plan1, json_config_name = smoother_config)
+            except:                
+                error_count+=1
+                if error_count > 3:
+                    raise
+                traceback.print_exc()
 
     
             
