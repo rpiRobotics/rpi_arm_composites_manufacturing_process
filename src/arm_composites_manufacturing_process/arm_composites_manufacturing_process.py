@@ -415,6 +415,9 @@ class ProcessController(object):
             world_to_gripper_tf=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
             panel_to_gripper_tf=world_to_gripper_tf.inv()*world_to_panel_tf
 
+            #Add extra cushion for spring extension. This should be a parameter somewhere rather than hard coded.
+            panel_to_gripper_tf.p[2]+=0.05
+
             self.current_payload=self.current_target
             self.current_target=None
             
@@ -467,8 +470,8 @@ class ProcessController(object):
             object_target=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
             pose_target2=copy.deepcopy(object_target)
             pose_target2.p[2] += 0.3
-            pose_target2.p = np.array([-0.02285,-1.840,1.0])
-            pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
+            #pose_target2.p = np.array([-0.02285,-1.840,1.0])
+            #pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
             
             path=self._plan(pose_target2, config = "transport_panel_short")
             
@@ -560,7 +563,7 @@ class ProcessController(object):
         try:
             self.rapid_node.set_digital_io("Vacuum_enable", 0)
             #time.sleep(1)
-            
+            self.controller_commander.set_controller_mode(ControllerCommander.MODE_HALT, 0.8*self.speed_scalar,[], [])
             #TODO: check vacuum feedback to make sure we have the panel
             pose_target2=self.controller_commander.compute_fk()
             pose_target2.p[2] += 0.25
@@ -740,10 +743,24 @@ class ProcessController(object):
         
 
     def _plan(self, target_pose, waypoints_pose=[], speed_scalar = 1, config = None, smoother_config = None):
-        plan1 = self.planner.trajopt_plan(target_pose, json_config_name = config)
-        if smoother_config is None:
-            return plan1
-        return self.planner.trajopt_smooth_trajectory(plan1, json_config_name = smoother_config)
+       error_count=0
+       while True:
+           try:
+               rospy.loginfo("begin rough trajectory planning with config " + str(config))
+               plan1 = self.planner.trajopt_plan(target_pose, json_config_name = config)
+               rospy.loginfo("rough trajectory planning complete " + str(config))
+               if smoother_config is None:
+                   return plan1
+               rospy.loginfo("begin trajectory smoothing with config " + str(smoother_config))
+               plan2=self.planner.trajopt_smooth_trajectory(plan1, json_config_name = smoother_config)
+               rospy.loginfo("trajectory smoothing complete with config " + str(smoother_config))
+               return plan2
+           except:
+               rospy.logerr("trajectory planning failed with config " + str(config) + " smoother_config " + str(smoother_config))
+               error_count+=1
+               if error_count > 3:                   
+                   raise
+               traceback.print_exc()
 
     
             
