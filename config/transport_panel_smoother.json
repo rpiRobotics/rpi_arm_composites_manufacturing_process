@@ -1,7 +1,7 @@
 {
   "basic_info" :
   {
-    "n_steps" : 50,
+    "n_steps" : 150,
     "manip" : "move_group",
     "dt_lower_lim" : 1,
     "dt_upper_lim" : 100,
@@ -20,7 +20,7 @@
       {
         "coeffs" : [40],
         "continuous": true,
-        "dist_pen" : [0.05]
+        "dist_pen" : [0.1]
       }
     },    
     {
@@ -39,7 +39,7 @@
         "targets" : [0],
         "coeffs" : [1000],
         "first_step" : 0,
-        "last_step" : 49
+        "last_step" : 149
       }
     },
     {
@@ -68,8 +68,8 @@
       {
         "targets" : [0,0,0,0,0,0],
         "coeffs" : [100000],
-        "first_step" : 47,
-        "last_step" : 49
+        "first_step" : 147,
+        "last_step" : 149
         
       }
     },
@@ -100,8 +100,8 @@
       "params" :
       {
         "targets" : [0, 0, 0, 0, 0, 0],        
-        "lower_tols" : [-0.01, -0.1, -0.1, -0.1, -0.1, -0.1],
-        "upper_tols" : [0.01, 0.1, 0.1, 0.1, 0.1, 0.1]        
+        "lower_tols" : [-0.05, -0.1, -0.1, -0.1, -0.1, -0.1],
+        "upper_tols" : [0.05, 0.1, 0.1, 0.1, 0.1, 0.1]        
       }
     }    
   ]
