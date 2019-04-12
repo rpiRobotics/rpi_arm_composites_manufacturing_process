@@ -4,7 +4,7 @@
     "n_steps" : 15,
     "manip" : "move_group",
     "dt_lower_lim" : 1,
-    "dt_upper_lim" : 25,
+    "dt_upper_lim" : 10,
     "use_time" : true,
     "start_fixed" : true
   },
@@ -28,7 +28,7 @@
       "params" :
       {
         "targets" : [0],
-        "coeffs" : [2000],
+        "coeffs" : [500],
         "first_step" : 0,
         "last_step" : 15
       }
@@ -48,7 +48,7 @@
         "targets" : [0,0,0,0,0,0],
         "coeffs" : [10000],
         "first_step" : 0,
-        "last_step" : 2
+        "last_step" : 0
         
       }
     },
@@ -59,7 +59,7 @@
       {
         "targets" : [0,0,0,0,0,0],
         "coeffs" : [10000],
-        "first_step" : 14,
+        "first_step" : 15,
         "last_step" : 15
         
       }
@@ -73,19 +73,10 @@
       "params" :
       {
         "targets" : [0, 0, 0, 0, 0, 0],        
-        "lower_tols" : [-0.05, -0.05, -0.05, -0.4, -1, -1],
-        "upper_tols" : [0.05, 0.05, 0.05, 0.4, 1, 1]        
+        "lower_tols" : [-0.1, -0.2, -0.2, -0.4, -1, -1],
+        "upper_tols" : [0.1, 0.2, 0.2, 0.4, 1, 1]        
       }
-    },
-    {
-      "type" : "joint_acc",
-      "params" :
-      {
-        "targets" : [0, 0, 0, 0, 0, 0],        
-        "lower_tols" : [-0.3, -0.3, -0.3, -0.8, -1, -1],
-        "upper_tols" : [0.3, 0.3, 0.3, 0.8, 1, 1]        
-      }
-    }    
+    }
   ]
 }
 

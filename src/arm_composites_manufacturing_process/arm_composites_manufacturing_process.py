@@ -257,15 +257,15 @@ class ProcessController(object):
             
             placement_goal=PBVSPlacementGoal()
             placement_goal.desired_transform=self.load_placement_target_config(target_payload)
-            placement_goal.stage1_kp=np.array([0.7]*6)
-            placement_goal.stage2_kp=np.array([0.7]*6)
-            placement_goal.stage3_kp=np.array([0.3]*6)
+            placement_goal.stage1_kp=np.array([0.9]*6)
+            placement_goal.stage2_kp=np.array([0.9]*6)
+            placement_goal.stage3_kp=np.array([0.5]*6)
             placement_goal.stage1_tol_p=0.05
             placement_goal.stage1_tol_r=np.deg2rad(1)
             placement_goal.stage2_tol_p=0.05
             placement_goal.stage2_tol_r=np.deg2rad(1)
             placement_goal.stage3_tol_p=0.001
-            placement_goal.stage3_tol_r=np.deg2rad(0.5)
+            placement_goal.stage3_tol_r=np.deg2rad(0.2)
             placement_goal.stage2_z_offset=0.05
 
             placement_goal.abort_force=Wrench(Vector3(500,500,500),Vector3(100,100,100))
@@ -416,7 +416,10 @@ class ProcessController(object):
             panel_to_gripper_tf=world_to_gripper_tf.inv()*world_to_panel_tf
 
             #Add extra cushion for spring extension. This should be a parameter somewhere rather than hard coded.
-            panel_to_gripper_tf.p[2]+=0.05
+            if(self.current_target=="leeward_mid_panel"):
+                panel_to_gripper_tf.p[2]+=0.07
+            else:
+                panel_to_gripper_tf.p[2]+=0.05
 
             self.current_payload=self.current_target
             self.current_target=None
@@ -469,7 +472,7 @@ class ProcessController(object):
             #Just use gripper position for now, think up a better way in future
             object_target=self.tf_listener.lookupTransform("world", "vacuum_gripper_tool", rospy.Time(0))
             pose_target2=copy.deepcopy(object_target)
-            pose_target2.p[2] += 0.3
+            pose_target2.p[2] += 0.35
             #pose_target2.p = np.array([-0.02285,-1.840,1.0])
             #pose_target2.R = rox.q2R([0.0, 0.707, 0.707, 0.0])
             
