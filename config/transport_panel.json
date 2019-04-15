@@ -20,7 +20,7 @@
       {
         "coeffs" : [40],
         "continuous": true,
-        "dist_pen" : [0.1]
+        "dist_pen" : [0.20]
       }
     },   
     {

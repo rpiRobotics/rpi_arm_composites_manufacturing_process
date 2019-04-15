@@ -15,15 +15,6 @@
   "costs" :
   [
     {
-      "type" : "collision",
-      "params" :
-      {
-        "coeffs" : [40],
-        "continuous": true,
-        "dist_pen" : [0.1]
-      }
-    },    
-    {
       "type" : "joint_jerk",
       "params" :
       {
