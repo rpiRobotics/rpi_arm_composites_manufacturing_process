@@ -56,6 +56,7 @@ class Planner(object):
     def _tesseract_diff_cb(self, msg):
         with self.lock:
             tesseract.processTesseractStateMsg(self.tesseract_env, msg)
+            self.tesseract_plotter.plotScene()
     
     def load_json_config(self, config_name, package_name = 'rpi_arm_composites_manufacturing_process'):
         r = rospkg.RosPack()
@@ -232,6 +233,7 @@ class Planner(object):
             if (planning_response.status_code != 0):
                 raise Exception("TrajOpt trajectory planning failed with code: %d" % planning_response.status_code )
             
+            self.tesseract_plotter.plotScene()
             self.tesseract_plotter.plotTrajectory(self.tesseract_env.getJointNames(), planning_response.trajectory[:,0:6])
             
             jt = JointTrajectory()
